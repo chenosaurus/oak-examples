@@ -1,3 +1,4 @@
+import time
 import depthai as dai
 import argparse
 
@@ -52,18 +53,9 @@ with dai.Pipeline(device) as pipeline:
     stereo.setSubpixelFractionalBits(3)
     stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
 
-    """ In-place post-processing configuration for a stereo depth node
-    The best combo of filters is application specific. Hard to say there is a one size fits all.
-    They also are not free. Even though they happen on device, you pay a penalty in fps. """
-    stereo.initialConfig.postProcessing.speckleFilter.enable = False
-    stereo.initialConfig.postProcessing.speckleFilter.speckleRange = 50
-    stereo.initialConfig.postProcessing.temporalFilter.enable = True
-    stereo.initialConfig.postProcessing.spatialFilter.enable = True
-    stereo.initialConfig.postProcessing.spatialFilter.holeFillingRadius = 2
-    stereo.initialConfig.postProcessing.spatialFilter.numIterations = 1
-    stereo.initialConfig.postProcessing.thresholdFilter.minRange = 400
-    stereo.initialConfig.postProcessing.thresholdFilter.maxRange = 15000
-    stereo.initialConfig.postProcessing.decimationFilter.decimationFactor = 1
+    align = p.create(dai.node.ImageAlign)
+    stereo.depth.link(align.input)
+    color_output.link(align.inputAlignTo)
 
     width, height = cam.getIspSize()
     intrinsics = calib_data.getCameraIntrinsics(
