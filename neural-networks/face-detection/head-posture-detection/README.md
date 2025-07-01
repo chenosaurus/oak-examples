@@ -1,6 +1,6 @@
 # Head Posture Detection
 
-This example demonstrates calculating head poses in a video stream. This is achieved by using a two stage inference DepthAI pipeline to first detect faces and then infer the pitch, yaw and roll of each one. The demo uses [YuNet Face detection model](https://zoo-rvc4.luxonis.com/luxonis/yunet/5d635f3c-45c0-41d2-8800-7ca3681b1915) for the first stage and to infer the pose it uses [Head posture model](https://zoo-rvc4.luxonis.com/luxonis/head-pose-estimation/068ac18a-de71-4a6e-9f0f-42776c0ef980) from the Luxonis Hub.
+This example demonstrates calculating head poses in a video stream. This is achieved by using a two stage inference DepthAI pipeline to first detect faces and then infer the pitch, yaw and roll of each one. The demo uses [YuNet Face detection model](https://models.luxonis.com/luxonis/yunet/5d635f3c-45c0-41d2-8800-7ca3681b1915) for the first stage and to infer the pose it uses [Head posture model](https://models.luxonis.com/luxonis/head-pose-estimation/068ac18a-de71-4a6e-9f0f-42776c0ef980) from the Luxonis Hub.
 
 **How it works?**
 
@@ -20,9 +20,9 @@ This example demonstrates calculating head poses in a video stream. This is achi
 
 ## Usage
 
-Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://stg.docs.luxonis.com/software/) to setup your device if you haven't done it already.
+Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://docs.luxonis.com/software-v3/) to setup your device if you haven't done it already.
 
-You can run the experiment fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
+You can run the example fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
 
 Here is a list of all available parameters:
 
@@ -58,18 +58,18 @@ Running in peripheral mode requires a host computer and there will be communicat
 python3 main.py
 ```
 
-This will run the experiment with default arguments.
+This will run the example with default arguments.
 
 ```bash
 python3 main.py --media <PATH_TO_VIDEO>
 ```
 
-This will run the experiment with the default device and the video file.
+This will run the example with the default device and the video file.
 
 ## Standalone Mode (RVC4 only)
 
 Running the example in the standalone mode, app runs entirely on the device.
-To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://stg.docs.luxonis.com/software/oak-apps/oakctl).
+To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://docs.luxonis.com/software-v3/oak-apps/oakctl).
 
 The app can then be run with:
 
@@ -78,4 +78,4 @@ oakctl connect <DEVICE_IP>
 oakctl app run .
 ```
 
-This will run the experiment with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://stg.docs.luxonis.com/software/oak-apps/configuration/) for more information about this configuration file).
+This will run the example with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://docs.luxonis.com/software-v3/oak-apps/configuration/) for more information about this configuration file).

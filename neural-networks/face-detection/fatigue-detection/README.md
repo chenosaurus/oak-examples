@@ -1,6 +1,6 @@
 # Fatigue Detections
 
-This example demonstrates how to detect if a person is fatigued and tired. Firstly, face is detected using the [YuNet](https://zoo-rvc4.luxonis.com/luxonis/yunet/5d635f3c-45c0-41d2-8800-7ca3681b1915) face detection model. It is then cropped and [MediaPipe Face Landmarker](https://zoo-rvc4.luxonis.com/luxonis/mediapipe-face-landmarker/4632304b-91cb-4fcb-b4cc-c8c414e13f56) model is used to detect all keypoints. These keypoints are then used to predict if the person is leaning forward and if their eyes are closed. If this is true for a around one second, the example prints a warning on the screen.
+This example demonstrates how to detect if a person is fatigued and tired. Firstly, face is detected using the [YuNet](https://models.luxonis.com/luxonis/yunet/5d635f3c-45c0-41d2-8800-7ca3681b1915) face detection model. It is then cropped and [MediaPipe Face Landmarker](https://models.luxonis.com/luxonis/mediapipe-face-landmarker/4632304b-91cb-4fcb-b4cc-c8c414e13f56) model is used to detect all keypoints. These keypoints are then used to predict if the person is leaning forward and if their eyes are closed. If this is true for a around one second, the example prints a warning on the screen.
 
 ## Demo
 
@@ -8,9 +8,9 @@ This example demonstrates how to detect if a person is fatigued and tired. First
 
 ## Usage
 
-Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://stg.docs.luxonis.com/software/) to setup your device if you haven't done it already.
+Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://docs.luxonis.com/software-v3/) to setup your device if you haven't done it already.
 
-You can run the experiment fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
+You can run the example fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
 
 Here is a list of all available parameters:
 
@@ -46,12 +46,12 @@ Running in peripheral mode requires a host computer and there will be communicat
 python3 main.py
 ```
 
-This will run the experiment with default arguments.
+This will run the example with default arguments.
 
 ## Standalone Mode (RVC4 only)
 
 Running the example in the standalone mode, app runs entirely on the device.
-To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://stg.docs.luxonis.com/software/oak-apps/oakctl).
+To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://docs.luxonis.com/software-v3/oak-apps/oakctl).
 
 The app can then be run with:
 
@@ -60,4 +60,4 @@ oakctl connect <DEVICE_IP>
 oakctl app run .
 ```
 
-This will run the experiment with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://stg.docs.luxonis.com/software/oak-apps/configuration/) for more information about this configuration file).
+This will run the example with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://docs.luxonis.com/software-v3/oak-apps/configuration/) for more information about this configuration file).

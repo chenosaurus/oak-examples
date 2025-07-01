@@ -1,3 +1,5 @@
+import numpy as np
+import os
 import depthai as dai
 from typing import List, Optional, Callable, Dict, Any
 
@@ -81,3 +83,30 @@ def start_pipelines(
 def any_pipeline_running(pipelines: List[Dict[str, Any]]) -> bool:
     """Return True if at least one pipeline is still running."""
     return any(item["pipeline"].isRunning() for item in pipelines)
+
+
+def load_extrinsics_for_devices(
+    devices_info: List[dai.DeviceInfo], cal_dir: str
+) -> Dict[str, Dict[str, Any]]:
+    """Loads extrinsic calibration data and assigns a friendly ID for each device."""
+    all_extrinsics: Dict[str, Dict[str, Any]] = {}
+    for friendly_id_counter, dev_info in enumerate(devices_info):
+        mxid = dev_info.getDeviceId()
+        file_path = os.path.join(cal_dir, f"extrinsics_{mxid}.npz")
+        if os.path.exists(file_path):
+            try:
+                data = np.load(file_path)
+                if 'cam_to_world' in data:
+                    friendly_id = friendly_id_counter + 1
+                    all_extrinsics[mxid] = {
+                        'cam_to_world': data['cam_to_world'],
+                        'friendly_id': friendly_id
+                    }
+                    print(f"✅ Loaded extrinsics for {mxid} (Friendly ID: {friendly_id_counter + 1})")
+                else:
+                    print(f"⚠️ Extrinsics file for {mxid} is missing 'cam_to_world' key.")
+            except Exception as e:
+                print(f"❌ Error loading extrinsics for {mxid}: {e}")
+        else:
+            print(f"⚠️ Extrinsics file not found for {mxid} at {file_path}. This device will be skipped.")
+    return all_extrinsics

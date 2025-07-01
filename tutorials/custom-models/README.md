@@ -1,6 +1,6 @@
 # Custom models
 
-This experiment demonstrates, how to create custom models with PyTorch/Kornia, convert them and run them with DepthAI. For more information see [Conversion](https://rvc4.docs.luxonis.com/software/ai-inference/conversion/) section in the documentation and [README.md](generate_model/README.md) file in the `generate_model/` folder.
+This example demonstrates, how to create custom models with PyTorch/Kornia, convert them and run them with DepthAI. For more information see [Conversion](https://rvc4.docs.luxonis.com/software/ai-inference/conversion/) section in the documentation and [README.md](generate_model/README.md) file in the `generate_model/` folder.
 
 `blur.py`, `concat.py`, `diff.py`, `edge.py` and `main.py` are scripts that run created custom models. `generate_model/` folder contains scripts that create these custom models (frame blurring, frame concatenation, frame difference and edge detection).
 
@@ -8,9 +8,9 @@ This experiment demonstrates, how to create custom models with PyTorch/Kornia, c
 
 ## Usage
 
-Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://stg.docs.luxonis.com/software/) to setup your device if you haven't done it already.
+Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://docs.luxonis.com/software-v3/) to setup your device if you haven't done it already.
 
-You can run the experiment fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
+You can run the example fully on device ([`STANDALONE` mode](#standalone-mode-rvc4-only)) or using your computer as host ([`PERIPHERAL` mode](#peripheral-mode)).
 
 Here is a list of all available parameters:
 
@@ -72,7 +72,7 @@ This will run the concatenation model on your camera input with FPS set to 10.
 ## Standalone Mode (RVC4 only)
 
 Running the example in the standalone mode, app runs entirely on the device.
-To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://stg.docs.luxonis.com/software/oak-apps/oakctl).
+To run the example in this mode, first install the `oakctl` tool using the installation instructions [here](https://docs.luxonis.com/software-v3/oak-apps/oakctl).
 
 The app can then be run with:
 
@@ -81,4 +81,4 @@ oakctl connect <DEVICE_IP>
 oakctl app run .
 ```
 
-This will run the experiment with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://stg.docs.luxonis.com/software/oak-apps/configuration/) for more information about this configuration file).
+This will run the example with default argument values. If you want to change these values you need to edit the `oakapp.toml` file (refer [here](https://docs.luxonis.com/software-v3/oak-apps/configuration/) for more information about this configuration file).

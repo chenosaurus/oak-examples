@@ -1,4 +1,7 @@
-# DepthAI Experiments
+# OAK Examples
+
+> ⚠️ **Looking for the old DAIv2 examples?**\
+> Check out the [`master` branch](https://github.com/luxonis/oak-examples/tree/master) for legacy content and examples built with the previous DepthAIv2 version.
 
 [![Forum](https://img.shields.io/badge/Forum-discuss-orange)](https://discuss.luxonis.com/)
 [![Docs](https://img.shields.io/badge/Docs-DepthAI-yellow)](https://docs.luxonis.com)

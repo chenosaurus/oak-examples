@@ -1,253 +1,196 @@
 import depthai as dai
 import numpy as np
-import cv2
+import pickle
 import collections
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any
 
-from utils.detection_object import WorldDetection
+from . import config
+from .detection_object import WorldDetection
+from .annotation_helper import AnnotationHelper
 
+class BirdsEyeView(dai.node.HostNode):
+    ANNOT_COLORS = {
+        "white": (1.0, 1.0, 1.0, 1.0),
+        "red": (1.0, 0.0, 0.0, 1.0),
+        "green": (0.0, 1.0, 0.0, 1.0),
+        "trail": (0.5, 0.5, 0.5, 1.0)
+    }
 
-class BirdsEyeViewNode(dai.node.HostNode):
-    colors = [ 
-        (0, 255, 255), (255, 0, 255), (255, 255, 0), (0, 0, 255), 
-        (0, 255, 0), (255, 0, 0), (255, 128, 0), (128, 0, 255),
-        (0, 128, 255), (128, 255, 0), (255, 0, 128), (0, 255, 128),
-        (128,128,128), (255,255,255), (0,128,128), (128,128,0)
-    ]
-
-    def __init__(self): 
+    def __init__(self):
         super().__init__()
-        self.output = self.createOutput(
-            possibleDatatypes=[dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgFrame, True)],
+        self.all_cam_extrinsics = {}
+        self.canvas = self.createOutput(
+            possibleDatatypes=[
+                dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgFrame, True)
+            ]
         )
-        
-        self.config = None
-        self.all_cam_extrinsics: Optional[Dict[str, Dict[str, Any]]] = None
-        self.width: int = 0
-        self.height: int = 0
-        self.scale: float = 0.0
-        self.trail_length: int = 0
-        self.label_map: Optional[List[str]] = None
-        self.world_to_birds_eye: Optional[np.ndarray] = None
-        self.bev_img_display: Optional[np.ndarray] = None
-        self.history: Optional[collections.deque] = None
-        
-        # To store the latest processed detections from each camera
-        self.latest_world_detections_per_cam: Dict[str, List[WorldDetection]] = {}
+        self.cameras_pos = self.createOutput(
+            possibleDatatypes=[
+                dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgAnnotations, True)
+            ]
+        )
+        self.history_trails = self.createOutput(
+            possibleDatatypes=[
+                dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgAnnotations, True)
+            ]
+        )
+        self.detections = self.createOutput(
+            possibleDatatypes=[
+                dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgAnnotations, True)
+            ]
+        )
+        self.mock_frame_counter = 0
 
-
-    def build(self, 
-              all_cam_extrinsics: Dict[str, Dict[str, Any]], 
-              node_config: Any,
-              all_trackers_outputs: Dict[str, dai.Node.Output]) -> "BirdsEyeViewNode":
-        self.config = node_config
-
+    def build(self, all_cam_extrinsics: Dict[str, Dict[str, Any]], detections: dai.Node.Output) -> "BirdsEyeView":
         self.all_cam_extrinsics = all_cam_extrinsics
-        self.width = self.config.bev_width
-        self.height = self.config.bev_height
-        self.scale = self.config.bev_scale 
-        self.trail_length = self.config.trail_length
-        self.label_map = self.config.label_map
+        self.width, self.height, self.scale = config.bev_width, config.bev_height, config.bev_scale
+        self.history = collections.deque(maxlen=config.trail_length)
+        self.world_to_bev_transform = np.array([
+            [self.scale, 0, 0, self.width / 2],
+            [0, self.scale, 0, self.height / 2]
+        ])
 
-        self.world_to_birds_eye = np.array([
-            [self.scale, 0,   0, self.width // 2],
-            [0, self.scale, 0, self.height // 2],
-        ], dtype=np.float32)
-
-        self.bev_img_display = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        self.history = collections.deque(maxlen=self.trail_length)
-
-        for mxid in self.all_cam_extrinsics.keys():
-            input_name = f"tracklets_{mxid}"
-            self.inputs[input_name].setBlocking(False)
-            self.inputs[input_name].setMaxSize(1) # Process latest tracklet message
-            self.latest_world_detections_per_cam[mxid] = [] # Initialize cache
-            print(f"    BEVNode: Created input port '{input_name}'")
-
-        self.link_args(tracklet_out)
+        self.camera_colors = [
+            (1.0, 0.0, 1.0, 1.0), # Magenta
+            (0.0, 1.0, 1.0, 1.0), # Cyan
+            (1.0, 1.0, 0.0, 1.0), # Yellow
+            (0.0, 0.0, 1.0, 1.0), # Blue
+            (0.0, 1.0, 0.0, 1.0)  # Green
+        ]
+        self.link_args(detections)
         return self
 
-    def process(self, tracklets_msg: dai.Tracklets):
-        mxid = msg_name.split("tracklets_")[1]
+    def process(self, detections_buffer: dai.Buffer):
+        groups: List[List[WorldDetection]] = pickle.loads(detections_buffer.getData().tobytes())
+        filtered_groups = [
+            filtered_grp for grp in groups 
+            if (filtered_grp := [det for det in grp if det.label.lower() in config.bev_labels])
+        ]
+        self.history.append(filtered_groups)
 
-        if mxid not in self.all_cam_extrinsics:
-            # This should not happen if inputs are created based on all_cam_extrinsics
-            print(f"BEVNode: Received data for unknown MXID '{mxid}' from port '{msg_name}'. Skipping.")
-            return
+        timestamp = detections_buffer.getTimestamp()
+        sequence_num = detections_buffer.getSequenceNum()
 
-        extrinsics = self.all_cam_extrinsics[mxid]
-        cam_to_world_matrix = extrinsics.get('cam_to_world')
-        friendly_id = extrinsics.get('friendly_id', 0)
+        canvas_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        canvas_msg = dai.ImgFrame()
+        canvas_msg.setTimestamp(timestamp)
+        canvas_msg.setSequenceNum(sequence_num)
+        canvas_msg.setCvFrame(canvas_frame, dai.ImgFrame.Type.BGR888p)
+        self.canvas.send(canvas_msg)
 
-        if cam_to_world_matrix is None:
-            self.latest_world_detections_per_cam[mxid] = [] # Clear data if extrinsics are missing
-            self._trigger_render() # Re-render to reflect missing data
-            return
+        w_norm, h_norm = 1 / self.width, 1 / self.height
 
-        current_cam_world_detections: List[WorldDetection] = []
-        for tracklet in tracklets_msg.tracklets:
-            if np.isnan(tracklet.spatialCoordinates.x) or \
-                np.isnan(tracklet.spatialCoordinates.y) or \
-                np.isnan(tracklet.spatialCoordinates.z):
-                continue 
+        cam_helper = self._create_camera_annotations(w_norm, h_norm)
+        self.cameras_pos.send(cam_helper.build(timestamp, sequence_num))
 
-            pos_cam_m = np.array([
-                tracklet.spatialCoordinates.x / 1000.0,
-                tracklet.spatialCoordinates.y / 1000.0, 
-                tracklet.spatialCoordinates.z / 1000.0,
-                1.0 
-            ]).reshape(4, 1)
+        trail_helper = self._create_trail_annotations(w_norm, h_norm)
+        self.history_trails.send(trail_helper.build(timestamp, sequence_num))
+        
+        det_helper = self._create_detection_annotations(filtered_groups, w_norm, h_norm)
+        self.detections.send(det_helper.build(timestamp, sequence_num))
 
-            pos_world_homogeneous = cam_to_world_matrix @ pos_cam_m
+    def _create_camera_annotations(self, w_norm: float, h_norm: float) -> AnnotationHelper:
+        """Draws static elements: camera positions, FOV cones, and world axes."""
+        helper = AnnotationHelper()
+        
+        # World axes
+        origin = self._project_to_bev(np.array([0,0,0,1]))
+        x_axis = self._project_to_bev(np.array([1,0,0,1]))
+        y_axis = self._project_to_bev(np.array([0,1,0,1]))
+        helper.draw_line(
+            (origin[0]*w_norm, origin[1]*h_norm), (x_axis[0]*w_norm, x_axis[1]*h_norm),
+            self.ANNOT_COLORS["red"], thickness=2
+        )
+        helper.draw_line(
+            (origin[0]*w_norm, origin[1]*h_norm), (y_axis[0]*w_norm, y_axis[1]*h_norm),
+            self.ANNOT_COLORS["green"], thickness=2
+        )
 
-            label_idx = tracklet.label
-            label_str = self.label_map[label_idx] if 0 <= label_idx < len(self.label_map) else f"L{label_idx}"
+        # Cameras & FOV cones
+        for _, extr in self.all_cam_extrinsics.items():
+            fid = extr["friendly_id"]
+            cam_color = self.camera_colors[(fid - 1) % len(self.camera_colors)]
+            p0 = self._project_to_bev(extr["cam_to_world"] @ np.array([0, 0, 0, 1]))
+            p1 = self._project_to_bev(extr["cam_to_world"] @ np.array([0.2, 0, 0.1, 1]))
+            p2 = self._project_to_bev(extr["cam_to_world"] @ np.array([-0.2, 0, 0.1, 1]))
+            
+            # Draw camera position as an ellipse
+            cam_points = self._get_ellipse_points((p0[0], p0[1]), 5, 5, w_norm, h_norm)
+            helper.draw_polyline(cam_points, cam_color, fill_color=cam_color, closed=True)
+            # Draw FOV lines
+            helper.draw_line((p0[0]*w_norm, p0[1]*h_norm), (p1[0]*w_norm, p1[1]*h_norm), cam_color, 2)
+            helper.draw_line((p0[0]*w_norm, p0[1]*h_norm), (p2[0]*w_norm, p2[1]*h_norm), cam_color, 2)
+            
+        return helper
 
-            confidence = 0.0
-            if hasattr(tracklet, 'srcImgDetection') and tracklet.srcImgDetection is not None:
-                confidence = getattr(tracklet.srcImgDetection, 'confidence', 0.0)
+    def _create_trail_annotations(self, w_norm: float, h_norm: float) -> AnnotationHelper:
+        """Draws historical trails of detected objects."""
+        helper = AnnotationHelper()
+        base_trail_brightness = self.ANNOT_COLORS["trail"][0]
+        radius_px = 25
 
-            world_det = WorldDetection(
-                tracklet_id=tracklet.id, label_str=label_str, label_idx=label_idx,
-                pos_world_homogeneous=pos_world_homogeneous,
-                camera_friendly_id=friendly_id, confidence=confidence
-            )
-            current_cam_world_detections.append(world_det)
+        for i, frame_groups in enumerate(self.history):
+            # Calculate brightness based on age. Oldest (i=0) is darkest.
+            brightness = (i / max(1, self.history.maxlen)) * base_trail_brightness
+            trail_color = (brightness, brightness, brightness, 1.0)
 
-        self.latest_world_detections_per_cam[mxid] = current_cam_world_detections
-        self._trigger_render()
-
-    def _trigger_render(self):
-        """Consolidates all current detections and renders the BEV."""
-        if self.bev_img_display is None: return
-
-        all_current_world_detections: List[WorldDetection] = []
-        for det_list in self.latest_world_detections_per_cam.values():
-            all_current_world_detections.extend(det_list)
-
-        self.bev_img_display.fill(0) 
-        self._draw_coordinate_system()
-        self._draw_cameras()
-
-        groups = self._make_groups(all_current_world_detections)
-
-        self._draw_history() 
-        if all_current_world_detections or groups:
-            self.history.append(groups) 
-        self._draw_groups(groups)   
-
-        img_frame_out = dai.ImgFrame()
-        img_frame_out.setType(dai.ImgFrame.Type.BGR888p) 
-        img_frame_out.setWidth(self.width)
-        img_frame_out.setHeight(self.height)
-        img_frame_out.setData(self.bev_img_display.tobytes()) 
-        self.output.send(img_frame_out)
-
-    def _project_to_bev(self, pos_world_homogeneous: np.ndarray) -> Optional[Tuple[int, int]]:
-        if self.world_to_birds_eye is None: return None
-        if pos_world_homogeneous.shape[0] < 3: return None
-        if pos_world_homogeneous.shape == (3,1) or pos_world_homogeneous.shape == (3,):
-            pos_world_homogeneous = np.append(pos_world_homogeneous.flatten()[:3], 1.0).reshape(4,1)
-        elif pos_world_homogeneous.shape != (4,1):
-            pos_world_homogeneous = np.array(pos_world_homogeneous[:4]).reshape(4,1)
-        bev_coords = self.world_to_birds_eye @ pos_world_homogeneous
-        u, v = int(bev_coords[0,0]), int(bev_coords[1,0])
-        if 0 <= u < self.width and 0 <= v < self.height: return u, v
-        return None
-
-    def _draw_coordinate_system(self):
-        if self.bev_img_display is None: return
-        origin_bev = self._project_to_bev(np.array([0,0,0,1], dtype=np.float32))
-        x_axis_bev = self._project_to_bev(np.array([1.0,0,0,1], dtype=np.float32)) 
-        y_axis_bev = self._project_to_bev(np.array([0,1.0,0,1], dtype=np.float32)) 
-        if origin_bev and x_axis_bev: cv2.line(self.bev_img_display, origin_bev, x_axis_bev, (0,0,255),1)
-        if origin_bev and y_axis_bev: cv2.line(self.bev_img_display, origin_bev, y_axis_bev, (0,255,0),1)
-
-    def _draw_cameras(self):
-        if self.bev_img_display is None or self.all_cam_extrinsics is None: return
-        for mxid, extrinsics in self.all_cam_extrinsics.items():
-            cam_to_world = extrinsics.get('cam_to_world')
-            friendly_id = extrinsics.get('friendly_id', 0)
-            if cam_to_world is None: continue
-            color_idx = (friendly_id -1) % len(self.colors) 
-            color = self.colors[color_idx]
-            cam_origin_w = cam_to_world @ np.array([0,0,0,1], dtype=np.float32)
-            cam_origin_bev = self._project_to_bev(cam_origin_w)
-            if cam_origin_bev:
-                cv2.circle(self.bev_img_display, cam_origin_bev, 6, color, -1)
-                cv2.putText(self.bev_img_display, str(friendly_id), (cam_origin_bev[0]+10, cam_origin_bev[1]+6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
-                cam_fwd_cam_space = np.array([0,0,0.5,1], dtype=np.float32) 
-                cam_fwd_w = cam_to_world @ cam_fwd_cam_space
-                cam_fwd_bev = self._project_to_bev(cam_fwd_w)
-                if cam_fwd_bev: cv2.line(self.bev_img_display, cam_origin_bev, cam_fwd_bev, color, 1)
-
-    def _make_groups(self, world_detections: List[WorldDetection]) -> List[List[WorldDetection]]:
-        if not world_detections: return []
-        n_components_for_dist = 2 
-        distance_threshold = 0.8  
-        for det in world_detections: det.corresponding_world_detections = []
-        for i in range(len(world_detections)):
-            for j in range(i + 1, len(world_detections)):
-                det1 = world_detections[i]; det2 = world_detections[j]
-                if det1.camera_friendly_id == det2.camera_friendly_id: continue
-                if det1.label_str == det2.label_str:
-                    dist = np.linalg.norm(det1.pos_world_cartesian[:n_components_for_dist] - det2.pos_world_cartesian[:n_components_for_dist])
-                    if dist < distance_threshold:
-                        det1.corresponding_world_detections.append(det2)
-                        det2.corresponding_world_detections.append(det1)
-        groups_final: List[List[WorldDetection]] = []
-        processed_in_group = set() 
-        for det_start_node in world_detections:
-            if det_start_node in processed_in_group: continue
-            current_group_set = set(); queue = collections.deque([det_start_node])
-            processed_in_group.add(det_start_node); current_group_set.add(det_start_node)
-            while queue:
-                current_det = queue.popleft()
-                for neighbor in current_det.corresponding_world_detections:
-                    if neighbor not in processed_in_group:
-                        processed_in_group.add(neighbor); current_group_set.add(neighbor); queue.append(neighbor)
-            if current_group_set: groups_final.append(list(current_group_set))
-        return groups_final
-
-    def _draw_groups(self, groups: List[List[WorldDetection]]):
-        if self.bev_img_display is None: return
-        for group in groups:
-            if not group: continue
-            sum_pos_world_cartesian = np.zeros(3, dtype=np.float32)
-            for det in group: sum_pos_world_cartesian += det.pos_world_cartesian
-            avg_pos_world_cartesian = sum_pos_world_cartesian / len(group)
-            avg_pos_world_hom = np.append(avg_pos_world_cartesian, 1.0)
-            avg_pos_bev = self._project_to_bev(avg_pos_world_hom)
-            label = group[0].label_str
-            if avg_pos_bev:
-                group_radius_px = int(0.12 * self.scale) 
-                cv2.circle(self.bev_img_display, avg_pos_bev, group_radius_px, (220,220,220), 1)
-                cv2.putText(self.bev_img_display, label, (avg_pos_bev[0]+group_radius_px+3, avg_pos_bev[1]+5), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (220,220,220),1)
-                for det in group:
-                    det_pos_bev = self._project_to_bev(det.pos_world_homogeneous)
-                    if det_pos_bev:
-                        color_idx = (det.camera_friendly_id -1) % len(self.colors)
-                        color = self.colors[color_idx]
-                        cv2.circle(self.bev_img_display, det_pos_bev, 2, color, -1)
-
-    def _draw_history(self):
-        if self.bev_img_display is None or self.history is None: return
-        for i, groups_in_hist_step in enumerate(self.history):
-            for group in groups_in_hist_step:
+            for group in frame_groups:
                 if not group: continue
-                sum_pos_world_cartesian = np.zeros(3, dtype=np.float32)
-                num_valid_dets_in_group = 0
-                for det in group:
-                    if det.pos_world_cartesian is not None:
-                        sum_pos_world_cartesian += det.pos_world_cartesian
-                        num_valid_dets_in_group +=1
-                if num_valid_dets_in_group == 0: continue
-                avg_pos_world_cartesian = sum_pos_world_cartesian / num_valid_dets_in_group
-                avg_pos_world_hom = np.append(avg_pos_world_cartesian, 1.0)
-                avg_pos_bev = self._project_to_bev(avg_pos_world_hom)
-                if avg_pos_bev:
-                    intensity = int((i / float(self.trail_length)) * 100) + 30 
-                    intensity = min(max(intensity, 20), 150) 
-                    radius = int((i / float(self.trail_length)) * 3) + 1 
-                    cv2.circle(self.bev_img_display, avg_pos_bev, radius, (intensity,intensity,intensity), -1)
+                avg_pos = np.mean([d.pos_world_homogeneous for d in group], axis=0)
+                u, v = self._project_to_bev(avg_pos)
+                trail_points = self._get_ellipse_points((u,v), radius_px, radius_px, w_norm, h_norm)
+                helper.draw_polyline(trail_points, trail_color, fill_color=trail_color, thickness=0, closed=True)
+        return helper
 
+    def _create_detection_annotations(self, groups: List[List[WorldDetection]], w_norm: float, h_norm: float) -> AnnotationHelper:
+        """Draws the current, live detections with colored dots and white rings."""
+        helper = AnnotationHelper()
+        detection_dot_radius_px = 6
+
+        for grp in groups:
+            if not grp: continue
+            # Draw individual detection dots
+            for det in grp:
+                u, v = self._project_to_bev(det.pos_world_homogeneous)
+                cam_col = self.camera_colors[(det.camera_friendly_id-1) % len(self.camera_colors)]
+                ellipse_points = self._get_ellipse_points((u, v), detection_dot_radius_px, detection_dot_radius_px, w_norm, h_norm)
+                helper.draw_polyline(points=ellipse_points, outline_color=cam_col, fill_color=cam_col, thickness=1, closed=True)
+
+            # Calculate and draw the ring
+            avg_pos = np.mean([d.pos_world_homogeneous for d in grp], axis=0)
+            u_avg, v_avg = self._project_to_bev(avg_pos)
+            center_px = (u_avg, v_avg)
+
+            if len(grp) > 1:
+                distances_m = [np.linalg.norm(det.pos_world_homogeneous[:2] - avg_pos[:2]) for det in grp]
+                dist_to_furthest_center_m = max(distances_m)
+            else:
+                dist_to_furthest_center_m = 0
+
+            dist_to_furthest_center_px = dist_to_furthest_center_m * self.scale
+            margin_px = 12
+            total_radius_px = dist_to_furthest_center_px + detection_dot_radius_px + margin_px
+            
+            ring_points = self._get_ellipse_points(center_px, total_radius_px, total_radius_px, w_norm, h_norm)
+            helper.draw_polyline(ring_points, self.ANNOT_COLORS["white"], thickness=2, closed=True)
+            
+            # Draw the label
+            text_offset_h = (total_radius_px + 15) * h_norm
+            text_n = (center_px[0] * w_norm, center_px[1] * h_norm - text_offset_h)
+            helper.draw_text(grp[0].label, text_n, self.ANNOT_COLORS["white"], size=14)
+            
+        return helper
+
+    def _project_to_bev(self, pos: np.ndarray) -> tuple[int, int]:
+        uv = self.world_to_bev_transform @ pos.reshape(4,1)
+        return int(uv[0]), int(uv[1])
+
+    def _get_ellipse_points(self, center_px, radius_px_x, radius_px_y, w_norm, h_norm, segments=20):
+        """Generates normalized points for an ellipse."""
+        points = []
+        for i in range(segments + 1):
+            theta = 2 * np.pi * (i / segments)
+            x = center_px[0] + radius_px_x * np.cos(theta)
+            y = center_px[1] + radius_px_y * np.sin(theta)
+            points.append((x * w_norm, y * h_norm))
+        return points
