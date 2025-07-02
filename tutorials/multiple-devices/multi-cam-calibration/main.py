@@ -23,7 +23,7 @@ def setup_device_pipeline(
 ) -> Optional[Dict[str, Any]]:
     mxid = dev_info.getDeviceId()
     print(f"\nAttempting to connect to device: {mxid}...")
-    device_instance = dai.Device(dev_info, maxUsbSpeed=dai.UsbSpeed.HIGH)
+    device_instance = dai.Device(dev_info)
 
     print(f"=== Successfully connected to device: {mxid}")
 

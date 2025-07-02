@@ -39,7 +39,6 @@ class BirdsEyeView(dai.node.HostNode):
                 dai.Node.DatatypeHierarchy(dai.DatatypeEnum.ImgAnnotations, True)
             ]
         )
-        self.mock_frame_counter = 0
 
     def build(self, all_cam_extrinsics: Dict[str, Dict[str, Any]], detections: dai.Node.Output) -> "BirdsEyeView":
         self.all_cam_extrinsics = all_cam_extrinsics

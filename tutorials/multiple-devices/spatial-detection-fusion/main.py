@@ -22,7 +22,6 @@ def setup_device_pipeline(
     visualizer: dai.RemoteConnection,
     fusion_manager: FusionManager,
     d: dai.Device,
-    friendly_id: int,
     main_pipeline: Optional[dai.Pipeline] = None,
 ) -> Optional[Dict[str, Any]]:
     """Sets up pipeline for a single device for BEV application."""
@@ -111,14 +110,14 @@ def main():
 
     visualizer = dai.RemoteConnection(httpPort=app_config.HTTP_PORT)
 
-    d = dai.Device(devices_to_setup_info[0], maxUsbSpeed=dai.UsbSpeed.HIGH)
+    d = dai.Device(devices_to_setup_info[0])
     print(f"\nConnected to device {d.getDeviceId()} for main pipeline.\n")
     pipeline = dai.Pipeline(d)
     fusion_manager = pipeline.create(FusionManager, all_cam_extrinsics)
 
     initialized_setups: List[Dict[str, Any]] = []
-    for fid, dev_info in enumerate(devices_to_setup_info):
-        setup_info = setup_device_pipeline(dev_info, visualizer, fusion_manager, d, fid, main_pipeline=pipeline)
+    for dev_info in devices_to_setup_info:
+        setup_info = setup_device_pipeline(dev_info, visualizer, fusion_manager, d, main_pipeline=pipeline)
         if setup_info:
             initialized_setups.append(setup_info)
         else:

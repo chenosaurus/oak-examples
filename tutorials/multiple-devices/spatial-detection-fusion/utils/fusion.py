@@ -1,9 +1,10 @@
 import depthai as dai
 import time
+import datetime
 import pickle
 import collections
 import numpy as np
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Deque
 
 from .detection_object import WorldDetection
 
@@ -32,36 +33,94 @@ class FusionManager(dai.node.ThreadedHostNode):
             )
             self.inputs[mxid] = inp
 
+        self.detection_buffer: Dict[int, List[WorldDetection]] = collections.defaultdict(list)
+        self.timestamp_queue: Deque[int] = collections.deque()
+        self.timeout = 0.05 # seconds
+        self.time_window_ms = 10 # time window for grouping near-simultaneous detections
+        self.latest_device_timestamp_ms = 0
+
     def run(self):
         while True:
-            for mxid, inp in self.inputs.items():
-                msg = inp.get() 
-                if msg is None:
-                    continue
-                self._handle(mxid, msg)
+            self._read_inputs()
+            self._process_buffer()
             time.sleep(0.002)
 
-    def _handle(self, mxid: str, detections_msg: dai.ADatatype):
-        assert isinstance(detections_msg, dai.SpatialImgDetections)
-        extrinsics = self.all_cam_extrinsics.get(mxid)
-        if not extrinsics:
+    def _read_inputs(self):
+        """Read all available detections from input queues and buffer them."""
+        for mxid, inp in self.inputs.items():
+            msg = inp.tryGet()
+            if msg is None:
+                continue
+
+            assert isinstance(msg, dai.SpatialImgDetections)
+            extrinsics = self.all_cam_extrinsics.get(mxid)
+            if not extrinsics:
+                continue
+
+            world_dets = self._transform_detections_to_world(
+                msg.detections,
+                extrinsics['cam_to_world'],
+                extrinsics['friendly_id']
+            )
+
+            ts_ms = int(msg.getTimestamp().total_seconds() * 1000)
+            self.latest_device_timestamp_ms = max(self.latest_device_timestamp_ms, ts_ms)
+            
+            self.detection_buffer[ts_ms].extend(world_dets)
+            if ts_ms not in self.timestamp_queue:
+                self.timestamp_queue.append(ts_ms)
+                self.timestamp_queue = collections.deque(sorted(self.timestamp_queue))
+
+    def _process_buffer(self):
+        """
+        Process timestamps that are older than the fusion timeout,
+        ensuring all relevant cameras have reported.
+        """
+        if not self.timestamp_queue:
             return
 
-        world_dets = self._transform_detections_to_world(
-            detections_msg.detections,
-            extrinsics['cam_to_world'],
-            extrinsics['friendly_id']
-        )
+        oldest_ts_ms = self.timestamp_queue[0]
 
-        groups = self._group_detections(world_dets)
-        data_bytes = pickle.dumps(groups)
-        arr_uint8 = bytearray(data_bytes)
+        if (self.latest_device_timestamp_ms - oldest_ts_ms) / 1000 > self.timeout:
+            start_ts = self.timestamp_queue[0]
+            end_ts = start_ts + self.time_window_ms 
 
-        groups_buffer = dai.Buffer()
-        groups_buffer.setData(arr_uint8) # type: ignore
-        groups_buffer.setTimestamp(detections_msg.getTimestamp())
-        groups_buffer.setSequenceNum(detections_msg.getSequenceNum())
-        self.output.send(groups_buffer)
+            all_detections_in_window = []
+
+            while self.timestamp_queue and self.timestamp_queue[0] <= end_ts:
+                ts_to_pop = self.timestamp_queue.popleft()
+                all_detections_in_window.extend(self.detection_buffer.pop(ts_to_pop, []))
+
+            if not all_detections_in_window:
+                return
+
+            groups = self._group_detections(all_detections_in_window)
+            pruned_groups = self._prune_redundant_detections(groups)
+
+            data_bytes = pickle.dumps(pruned_groups)
+            buffer = dai.Buffer()
+            buffer.setData(bytearray(data_bytes)) # type: ignore 
+            buffer.setTimestamp(datetime.timedelta(milliseconds=start_ts))
+            self.output.send(buffer)
+
+    def _prune_redundant_detections(self, groups: List[List[WorldDetection]]) -> List[List[WorldDetection]]:
+        """
+        For each group, ensure that each camera is represented by at most one detection
+        (the one with the highest confidence).
+        """
+        pruned_groups = []
+        for group in groups:
+            # dictionary to track the best detection for each device within this group
+            best_det_per_cam: Dict[int, WorldDetection] = {}
+            
+            for det in group:
+                cam_id = det.camera_friendly_id
+                if cam_id not in best_det_per_cam or det.confidence > best_det_per_cam[cam_id].confidence:
+                    best_det_per_cam[cam_id] = det
+            
+            pruned_groups.append(list(best_det_per_cam.values()))
+            
+        return pruned_groups
 
     def _transform_detections_to_world(
         self,
@@ -72,6 +131,10 @@ class FusionManager(dai.node.ThreadedHostNode):
         world_detections: List[WorldDetection] = []
         for det in detections:
             coords = det.spatialCoordinates
+
+            # filter out ghost detections with z=0
+            if coords.z == 0:
+                continue
 
             # Convert from mm to m and add homogeneous w=1
             pos_cam = np.array([
