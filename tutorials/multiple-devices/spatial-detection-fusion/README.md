@@ -8,7 +8,7 @@ This example demonstrates a multiple Luxonis OAK cameras setup that detects obje
 
 ## Usage
 
-> Before you can run this demo you need to calibrate the cameras. Go to [multi-cam-calibration](../multi-cam-calibration) and generate a calibration file for each camera. Do not move your cameras after this step as the calibration file is . Make sure that the `calibration_data_dir` in the [`config.py`](config.py) is set correctly.
+> Before you can run this demo you need to calibrate the cameras, the goal is to figure out the exact position and orientation of every camera relative to each other, so the application can fuse their individual views into a single, unified "world". Go to [multi-cam-calibration](../multi-cam-calibration) and generate a calibration file for each camera. Once calibration is complete, do not move your cameras. If you do, you will need to re-calibrate. Make sure that the `calibration_data_dir` in the [`config.py`](config.py) is set correctly.
 
 The system employs a *main device* architecture. Upon launch, the first available OAK camera is designated as the central processing hub.
 
