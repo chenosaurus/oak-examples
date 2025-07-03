@@ -2,10 +2,9 @@
 
 This example demonstrates a multiple Luxonis OAK cameras setup that detects objects in 3D space, fuses the data from all connected cameras, and visualizes the results in a unified Bird's Eye View (BEV).
 
-## Demo 
+## Demo
 
 ![](img/demo.gif)
-
 
 ## Usage
 
@@ -96,5 +95,5 @@ This will include IP cameras and then only use the first 3 discovered devices.
 ```bash
 python main.py --fps_limit 30
 ```
-This will run the demo with an FPS limit of 30 for all cameras.
 
+This will run the demo with an FPS limit of 30 for all cameras.

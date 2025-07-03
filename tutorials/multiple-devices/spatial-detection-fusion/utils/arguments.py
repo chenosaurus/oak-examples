@@ -6,7 +6,9 @@ def initialize_argparser():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.description = "Multi-device spatial detection and Bird's Eye View (BEV) fusion application."
+    parser.description = (
+        "Multi-device spatial detection and Bird's Eye View (BEV) fusion application."
+    )
 
     parser.add_argument(
         "--include-ip",

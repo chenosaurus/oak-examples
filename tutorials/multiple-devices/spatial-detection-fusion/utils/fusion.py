@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Deque
 
 from .detection_object import WorldDetection
 
+
 class FusionManager(dai.node.ThreadedHostNode):
     def __init__(self, all_cam_extrinsics: Dict[str, Dict[str, Any]], fps: int) -> None:
         super().__init__()
@@ -25,20 +26,26 @@ class FusionManager(dai.node.ThreadedHostNode):
             inp = self.createInput(
                 name=mxid,
                 group=mxid,
-                queueSize=4, 
+                queueSize=4,
                 blocking=False,
-                types=[dai.Node.DatatypeHierarchy(
-                    dai.DatatypeEnum.SpatialImgDetections, True
-                )]
+                types=[
+                    dai.Node.DatatypeHierarchy(
+                        dai.DatatypeEnum.SpatialImgDetections, True
+                    )
+                ],
             )
             self.inputs[mxid] = inp
 
-        self.detection_buffer: Dict[int, List[WorldDetection]] = collections.defaultdict(list)
+        self.detection_buffer: Dict[int, List[WorldDetection]] = (
+            collections.defaultdict(list)
+        )
         self.timestamp_queue: Deque[int] = collections.deque()
 
-        frame_time_ms = 1000 / fps # time for one frame in milliseconds
-        self.time_window_ms = frame_time_ms * 0.8  # time window for grouping near-simultaneous detections
-        self.timeout = frame_time_ms / 1000 # timeout for fusion in seconds
+        frame_time_ms = 1000 / fps  # time for one frame in milliseconds
+        self.time_window_ms = (
+            frame_time_ms * 0.8
+        )  # time window for grouping near-simultaneous detections
+        self.timeout = frame_time_ms / 1000  # timeout for fusion in seconds
         self.latest_device_timestamp_ms = 0
 
     def run(self):
@@ -60,14 +67,14 @@ class FusionManager(dai.node.ThreadedHostNode):
                 continue
 
             world_dets = self._transform_detections_to_world(
-                msg.detections,
-                extrinsics['cam_to_world'],
-                extrinsics['friendly_id']
+                msg.detections, extrinsics["cam_to_world"], extrinsics["friendly_id"]
             )
 
             ts_ms = int(msg.getTimestamp().total_seconds() * 1000)
-            self.latest_device_timestamp_ms = max(self.latest_device_timestamp_ms, ts_ms)
-            
+            self.latest_device_timestamp_ms = max(
+                self.latest_device_timestamp_ms, ts_ms
+            )
+
             self.detection_buffer[ts_ms].extend(world_dets)
             if ts_ms not in self.timestamp_queue:
                 self.timestamp_queue.append(ts_ms)
@@ -85,13 +92,15 @@ class FusionManager(dai.node.ThreadedHostNode):
 
         if (self.latest_device_timestamp_ms - oldest_ts_ms) / 1000 > self.timeout:
             start_ts = self.timestamp_queue[0]
-            end_ts = start_ts + self.time_window_ms 
+            end_ts = start_ts + self.time_window_ms
 
             all_detections_in_window = []
 
             while self.timestamp_queue and self.timestamp_queue[0] <= end_ts:
                 ts_to_pop = self.timestamp_queue.popleft()
-                all_detections_in_window.extend(self.detection_buffer.pop(ts_to_pop, []))
+                all_detections_in_window.extend(
+                    self.detection_buffer.pop(ts_to_pop, [])
+                )
 
             if not all_detections_in_window:
                 return
@@ -101,11 +110,13 @@ class FusionManager(dai.node.ThreadedHostNode):
 
             data_bytes = pickle.dumps(pruned_groups)
             buffer = dai.Buffer()
-            buffer.setData(bytearray(data_bytes)) # type: ignore 
+            buffer.setData(bytearray(data_bytes))  # type: ignore
             buffer.setTimestamp(datetime.timedelta(milliseconds=start_ts))
             self.output.send(buffer)
 
-    def _prune_redundant_detections(self, groups: List[List[WorldDetection]]) -> List[List[WorldDetection]]:
+    def _prune_redundant_detections(
+        self, groups: List[List[WorldDetection]]
+    ) -> List[List[WorldDetection]]:
         """
         For each group, ensure that each camera is represented by at most one detection
         (the one with the highest confidence).
@@ -114,21 +125,24 @@ class FusionManager(dai.node.ThreadedHostNode):
         for group in groups:
             # dictionary to track the best detection for each device within this group
             best_det_per_cam: Dict[int, WorldDetection] = {}
-            
+
             for det in group:
                 cam_id = det.camera_friendly_id
-                if cam_id not in best_det_per_cam or det.confidence > best_det_per_cam[cam_id].confidence:
+                if (
+                    cam_id not in best_det_per_cam
+                    or det.confidence > best_det_per_cam[cam_id].confidence
+                ):
                     best_det_per_cam[cam_id] = det
-            
+
             pruned_groups.append(list(best_det_per_cam.values()))
-            
+
         return pruned_groups
 
     def _transform_detections_to_world(
         self,
         detections: List[dai.SpatialImgDetection],
         cam_to_world: np.ndarray,
-        friendly_id: int
+        friendly_id: int,
     ) -> List[WorldDetection]:
         world_detections: List[WorldDetection] = []
         for det in detections:
@@ -139,12 +153,9 @@ class FusionManager(dai.node.ThreadedHostNode):
                 continue
 
             # Convert from mm to m and add homogeneous w=1
-            pos_cam = np.array([
-                coords.x / 1000.0, 
-                -coords.y / 1000.0, 
-                coords.z / 1000.0, 
-                1.0
-            ])
+            pos_cam = np.array(
+                [coords.x / 1000.0, -coords.y / 1000.0, coords.z / 1000.0, 1.0]
+            )
             pos_world = cam_to_world @ pos_cam.reshape(4, 1)
 
             world_detections.append(
@@ -157,13 +168,17 @@ class FusionManager(dai.node.ThreadedHostNode):
             )
         return world_detections
 
-    def _group_detections(self, detections: List[WorldDetection]) -> List[List[WorldDetection]]:
+    def _group_detections(
+        self, detections: List[WorldDetection]
+    ) -> List[List[WorldDetection]]:
         distance_threshold = 1.5
         for i in range(len(detections)):
             for j in range(i + 1, len(detections)):
                 det1, det2 = detections[i], detections[j]
                 if det1.label == det2.label:
-                    dist = np.linalg.norm(det1.pos_world_homogeneous[:2] - det2.pos_world_homogeneous[:2])
+                    dist = np.linalg.norm(
+                        det1.pos_world_homogeneous[:2] - det2.pos_world_homogeneous[:2]
+                    )
                     if dist < distance_threshold:
                         det1.corresponding_world_detections.append(det2)
                         det2.corresponding_world_detections.append(det1)

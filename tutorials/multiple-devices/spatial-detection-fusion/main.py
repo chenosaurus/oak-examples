@@ -18,18 +18,21 @@ from functools import partial
 
 _, args = initialize_argparser()
 
+
 def setup_device_pipeline(
     dev_info: dai.DeviceInfo,
     visualizer: dai.RemoteConnection,
     fusion_manager: FusionManager,
     main_device: dai.Device,
     main_pipeline: Optional[dai.Pipeline] = None,
-    fps_limit: int = 30
+    fps_limit: int = 30,
 ) -> Optional[Dict[str, Any]]:
     """Sets up pipeline for a single device for BEV application."""
     mxid = dev_info.getDeviceId()
     if mxid == main_device.getDeviceId():
-        print(f"\nSkipping initialization of device {mxid} as it is already initialized.")
+        print(
+            f"\nSkipping initialization of device {mxid} as it is already initialized."
+        )
         device_instance = main_device
         pipeline = main_pipeline if main_pipeline else dai.Pipeline(device_instance)
     else:
@@ -48,15 +51,21 @@ def setup_device_pipeline(
     print(f"    >>> USB speed: {device_instance.getUsbSpeed().name}")
 
     platform = device_instance.getPlatformAsString()
-    model_description = dai.NNModelDescription(app_config.nn_model_slug, platform=platform)
+    model_description = dai.NNModelDescription(
+        app_config.nn_model_slug, platform=platform
+    )
     nn_archive = dai.NNArchive(dai.getModelFromZoo(model_description, useCached=False))
-    nn_input_size = nn_archive.getInputSize() 
+    nn_input_size = nn_archive.getInputSize()
     if not nn_input_size:
-        print(f"    ERROR: No input size found in NN archive for {mxid}. Skipping device setup.")
+        print(
+            f"    ERROR: No input size found in NN archive for {mxid}. Skipping device setup."
+        )
         return None
 
-    cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A, sensorFps=fps_limit)
-    
+    cam = pipeline.create(dai.node.Camera).build(
+        dai.CameraBoardSocket.CAM_A, sensorFps=fps_limit
+    )
+
     left_cam = pipeline.create(dai.node.Camera).build(
         dai.CameraBoardSocket.CAM_B,
     )
@@ -81,9 +90,7 @@ def setup_device_pipeline(
     detector.setBoundingBoxScaleFactor(0.2)
 
     if platform == "RVC2":
-        detector.setNNArchive(
-            nn_archive, numShaves=7
-        )
+        detector.setNNArchive(nn_archive, numShaves=7)
 
     detector.out.link(fusion_manager.inputs[mxid])
 
@@ -97,6 +104,7 @@ def setup_device_pipeline(
         "mxid": mxid,
     }
 
+
 def main():
     all_device_infos = dai.Device.getAllAvailableDevices()
     available_devices_info = filter_devices(
@@ -109,16 +117,24 @@ def main():
 
     print(f"Found {len(available_devices_info)} DepthAI devices to configure.")
 
-    all_cam_extrinsics = load_extrinsics_for_devices(available_devices_info, config.calibration_data_dir)
-    if not all_cam_extrinsics: print("No extrinsic calibrations loaded. BEV cannot function. Exiting."); return
-    
-    devices_to_setup_info = [dev for dev in available_devices_info if dev.getDeviceId() in all_cam_extrinsics]
+    all_cam_extrinsics = load_extrinsics_for_devices(
+        available_devices_info, config.calibration_data_dir
+    )
+    if not all_cam_extrinsics:
+        print("No extrinsic calibrations loaded. BEV cannot function. Exiting.")
+        return
+
+    devices_to_setup_info = [
+        dev for dev in available_devices_info if dev.getDeviceId() in all_cam_extrinsics
+    ]
     print(f"Proceeding with {len(devices_to_setup_info)} devices that have extrinsics.")
 
     visualizer = dai.RemoteConnection(httpPort=app_config.HTTP_PORT)
 
     main_device = dai.Device(devices_to_setup_info[0])
-    print(f"\nSuccessfully connected to device {main_device.getDeviceId()} for main pipeline.")
+    print(
+        f"\nSuccessfully connected to device {main_device.getDeviceId()} for main pipeline."
+    )
     pipeline = dai.Pipeline(main_device)
     fusion_manager = pipeline.create(FusionManager, all_cam_extrinsics, args.fps_limit)
 
@@ -127,16 +143,17 @@ def main():
         fusion_manager=fusion_manager,
         main_device=main_device,
         main_pipeline=pipeline,
-        fps_limit=args.fps_limit
+        fps_limit=args.fps_limit,
     )
     initialized_setups: List[Dict[str, Any]] = setup_devices(
         available_devices_info, visualizer, configured_pipeline_builder
     )
-    if not initialized_setups: print("No devices were successfully set up. Exiting."); return
-    
+    if not initialized_setups:
+        print("No devices were successfully set up. Exiting.")
+        return
+
     bev = pipeline.create(BirdsEyeView).build(
-        all_cam_extrinsics=all_cam_extrinsics,
-        detections=fusion_manager.output
+        all_cam_extrinsics=all_cam_extrinsics, detections=fusion_manager.output
     )
 
     visualizer.addTopic("BEV Canvas", bev.canvas, group="BEV")
@@ -144,8 +161,12 @@ def main():
     visualizer.addTopic("BEV History Trails", bev.history_trails, group="BEV")
     visualizer.addTopic("BEV Detections", bev.detections, group="BEV")
 
-    active_device_pipelines_info: List[Dict[str, Any]] = start_pipelines(initialized_setups, visualizer)
-    if not active_device_pipelines_info: print("No device pipelines are active. Exiting."); return
+    active_device_pipelines_info: List[Dict[str, Any]] = start_pipelines(
+        initialized_setups, visualizer
+    )
+    if not active_device_pipelines_info:
+        print("No device pipelines are active. Exiting.")
+        return
     print(f"\n{len(active_device_pipelines_info)} device pipeline(s) started.")
 
     while any_pipeline_running(active_device_pipelines_info):
@@ -154,6 +175,6 @@ def main():
             print("Got 'q' key from the remote connection! Shutting down.")
             os._exit(0)
 
+
 if __name__ == "__main__":
     main()
-

@@ -96,17 +96,23 @@ def load_extrinsics_for_devices(
         if os.path.exists(file_path):
             try:
                 data = np.load(file_path)
-                if 'cam_to_world' in data:
+                if "cam_to_world" in data:
                     friendly_id = friendly_id_counter + 1
                     all_extrinsics[mxid] = {
-                        'cam_to_world': data['cam_to_world'],
-                        'friendly_id': friendly_id
+                        "cam_to_world": data["cam_to_world"],
+                        "friendly_id": friendly_id,
                     }
-                    print(f"✅ Loaded extrinsics for {mxid} (Friendly ID: {friendly_id_counter + 1})")
+                    print(
+                        f"✅ Loaded extrinsics for {mxid} (Friendly ID: {friendly_id_counter + 1})"
+                    )
                 else:
-                    print(f"⚠️ Extrinsics file for {mxid} is missing 'cam_to_world' key.")
+                    print(
+                        f"⚠️ Extrinsics file for {mxid} is missing 'cam_to_world' key."
+                    )
             except Exception as e:
                 print(f"❌ Error loading extrinsics for {mxid}: {e}")
         else:
-            print(f"⚠️ Extrinsics file not found for {mxid} at {file_path}. This device will be skipped.")
+            print(
+                f"⚠️ Extrinsics file not found for {mxid} at {file_path}. This device will be skipped."
+            )
     return all_extrinsics
