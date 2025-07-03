@@ -171,7 +171,7 @@ class FusionManager(dai.node.ThreadedHostNode):
 
             world_detections.append(
                 WorldDetection(
-                    label=det.name,
+                    label=det.labelName,
                     confidence=det.confidence,
                     pos_world_homogeneous=pos_world,
                     camera_friendly_id=friendly_id,
