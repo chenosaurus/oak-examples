@@ -5,6 +5,7 @@ import pickle
 import collections
 import numpy as np
 from typing import Dict, List, Any, Deque
+from scipy.optimize import linear_sum_assignment
 
 from .detection_object import WorldDetection
 
@@ -171,29 +172,71 @@ class FusionManager(dai.node.ThreadedHostNode):
     def _group_detections(
         self, detections: List[WorldDetection]
     ) -> List[List[WorldDetection]]:
-        distance_threshold = 1.5
-        for i in range(len(detections)):
-            for j in range(i + 1, len(detections)):
-                det1, det2 = detections[i], detections[j]
-                if det1.label == det2.label:
-                    dist = np.linalg.norm(
-                        det1.pos_world_homogeneous[:2] - det2.pos_world_homogeneous[:2]
-                    )
-                    if dist < distance_threshold:
-                        det1.corresponding_world_detections.append(det2)
-                        det2.corresponding_world_detections.append(det1)
+        if not detections:
+            return []
 
-        groups, visited = [], set()
+        detections_by_label = collections.defaultdict(list)
         for det in detections:
-            if det not in visited:
-                current_group, q = [], collections.deque([det])
-                visited.add(det)
+            detections_by_label[det.label].append(det)
+
+        all_groups = []
+
+        for _, dets in detections_by_label.items():
+            if len(dets) <= 1:
+                all_groups.append(dets)
+                continue
+
+            # cost matrix basd on 3D distance
+            num_dets = len(dets)
+            cost_matrix = np.full((num_dets, num_dets), np.inf)
+            for i in range(num_dets):
+                for j in range(num_dets):
+                    if i == j:
+                        continue
+                    dist = np.linalg.norm(
+                        dets[i].pos_world_homogeneous[:3]
+                        - dets[j].pos_world_homogeneous[:3]
+                    )
+                    cost_matrix[i, j] = dist
+
+            row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+            visited = set()
+            distance_threshold = 0.5  # max distance in meters for a valid pairing
+
+            for r, c in zip(row_ind, col_ind):
+                if r in visited or c in visited:
+                    continue
+
+                cost = cost_matrix[r, c]
+                if cost > distance_threshold:
+                    continue
+
+                # this is a valid pair, start a new group
+                group = {dets[r], dets[c]}
+                visited.add(dets[r])
+                visited.add(dets[c])
+
+                q = collections.deque([dets[r], dets[c]])
                 while q:
                     current_det = q.popleft()
-                    current_group.append(current_det)
-                    for neighbor in current_det.corresponding_world_detections:
-                        if neighbor not in visited:
-                            visited.add(neighbor)
-                            q.append(neighbor)
-                groups.append(current_group)
-        return groups
+                    # find other detections linked to the current one
+                    for idx in np.where(row_ind == dets.index(current_det))[0]:
+                        partner_idx = col_ind[idx]
+                        if (
+                            dets[partner_idx] not in visited
+                            and cost_matrix[dets.index(current_det), partner_idx]
+                            < distance_threshold
+                        ):
+                            group.add(dets[partner_idx])
+                            visited.add(dets[partner_idx])
+                            q.append(dets[partner_idx])
+
+                all_groups.append(list(group))
+
+            # add any detections that were not part of any group as their own group
+            for det in dets:
+                if det not in visited:
+                    all_groups.append([det])
+
+        return all_groups
