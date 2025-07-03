@@ -43,13 +43,13 @@ def filter_devices(
 def setup_devices(
     devices_info: List[dai.DeviceInfo],
     visualizer: dai.RemoteConnection,
-    setup_device_pipeline: Callable[
+    pipeline_builder: Callable[
         [dai.DeviceInfo, dai.RemoteConnection], Optional[Dict[str, Any]]
     ],
 ) -> List[Dict[str, Any]]:
     initialized_setups: List[Dict[str, Any]] = []
     for dev_info in devices_info:
-        setup_info = setup_device_pipeline(dev_info, visualizer)
+        setup_info = pipeline_builder(dev_info, visualizer)
         if setup_info:
             initialized_setups.append(setup_info)
         else:

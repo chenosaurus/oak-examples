@@ -61,10 +61,13 @@ class BirdsEyeView(dai.node.HostNode):
 
     def process(self, detections_buffer: dai.Buffer):
         groups: List[List[WorldDetection]] = pickle.loads(detections_buffer.getData().tobytes())
-        filtered_groups = [
-            filtered_grp for grp in groups 
-            if (filtered_grp := [det for det in grp if det.label.lower() in config.bev_labels])
-        ]
+        if config.bev_labels:
+            filtered_groups = [
+                filtered_grp for grp in groups 
+                if (filtered_grp := [det for det in grp if det.label.lower() in config.bev_labels])
+            ]
+        else: 
+            filtered_groups = groups 
         self.history.append(filtered_groups)
 
         timestamp = detections_buffer.getTimestamp()
@@ -131,7 +134,7 @@ class BirdsEyeView(dai.node.HostNode):
         for i, frame_groups in enumerate(self.history):
             # Calculate brightness based on age. Oldest (i=0) is darkest.
             brightness = (i / max(1, self.history.maxlen)) * base_trail_brightness
-            trail_color = (brightness, brightness, brightness, 1.0)
+            trail_color = (brightness, brightness, brightness, 1)
 
             for group in frame_groups:
                 if not group: continue
@@ -181,6 +184,7 @@ class BirdsEyeView(dai.node.HostNode):
         return helper
 
     def _project_to_bev(self, pos: np.ndarray) -> tuple[int, int]:
+        """Projects a 3D world position to 2D BEV coordinates."""
         uv = self.world_to_bev_transform @ pos.reshape(4,1)
         return int(uv[0]), int(uv[1])
 

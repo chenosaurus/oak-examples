@@ -6,7 +6,7 @@ def initialize_argparser():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.description = "Example with multiple devices connected."
+    parser.description = "Multi-device spatial detection and Bird's Eye View (BEV) fusion application."
 
     parser.add_argument(
         "--include-ip",
@@ -19,6 +19,14 @@ def initialize_argparser():
         type=int,
         default=None,
         help="Limit the total number of devices to this count",
+    )
+
+    parser.add_argument(
+        "--fps_limit",
+        help="FPS limit for the model runtime.",
+        required=False,
+        default=30,
+        type=int,
     )
 
     args = parser.parse_args()

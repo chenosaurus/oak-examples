@@ -14,6 +14,7 @@ from utils.arguments import initialize_argparser
 from utils.birds_eye_view import BirdsEyeView
 from utils.fusion import FusionManager
 from utils import config as app_config
+from functools import partial
 
 _, args = initialize_argparser()
 
@@ -21,24 +22,30 @@ def setup_device_pipeline(
     dev_info: dai.DeviceInfo,
     visualizer: dai.RemoteConnection,
     fusion_manager: FusionManager,
-    d: dai.Device,
+    main_device: dai.Device,
     main_pipeline: Optional[dai.Pipeline] = None,
+    fps_limit: int = 30
 ) -> Optional[Dict[str, Any]]:
     """Sets up pipeline for a single device for BEV application."""
     mxid = dev_info.getDeviceId()
-    if mxid == d.getDeviceId():
-        print(f"    === Skipping init device {mxid} as it is the main device.")
-        device_instance = d
+    if mxid == main_device.getDeviceId():
+        print(f"\nSkipping initialization of device {mxid} as it is already initialized.")
+        device_instance = main_device
         pipeline = main_pipeline if main_pipeline else dai.Pipeline(device_instance)
     else:
         try:
-            device_instance = dai.Device(dev_info, maxUsbSpeed=dai.UsbSpeed.HIGH)
-            print(f"    === Successfully connected to device: {mxid}")
+            print(f"\nAttempting to connect to device: {mxid}...")
+            device_instance = dai.Device(dev_info)
+            print(f"=== Successfully connected to device: {mxid}")
             pipeline = dai.Pipeline(device_instance)
-            print(f"        Pipeline created for device: {mxid}")
+            print(f"    >>> Pipeline created for device: {mxid}")
         except RuntimeError as e:
             print(f"    ERROR: Failed to connect to device {mxid}: {e}")
             return None
+
+    cameras = device_instance.getConnectedCameraFeatures()
+    print(f"    >>> Cameras: {[c.socket.name for c in cameras]}")
+    print(f"    >>> USB speed: {device_instance.getUsbSpeed().name}")
 
     platform = device_instance.getPlatformAsString()
     model_description = dai.NNModelDescription(app_config.nn_model_slug, platform=platform)
@@ -48,16 +55,16 @@ def setup_device_pipeline(
         print(f"    ERROR: No input size found in NN archive for {mxid}. Skipping device setup.")
         return None
 
-    cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A)
+    cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A, sensorFps=fps_limit)
     
     left_cam = pipeline.create(dai.node.Camera).build(
-        dai.CameraBoardSocket.CAM_B
+        dai.CameraBoardSocket.CAM_B,
     )
     right_cam = pipeline.create(dai.node.Camera).build(
-        dai.CameraBoardSocket.CAM_C
+        dai.CameraBoardSocket.CAM_C,
     )
     stereo = pipeline.create(dai.node.StereoDepth).build(
-        left=left_cam.requestOutput(nn_input_size),
+        left=left_cam.requestOutput(nn_input_size, fps=fps_limit),
         right=right_cam.requestOutput(nn_input_size),
         presetMode=dai.node.StereoDepth.PresetMode.HIGH_DETAIL,
     )
@@ -83,7 +90,7 @@ def setup_device_pipeline(
     visualizer.addTopic(f"{mxid}", detector.passthrough, group=mxid)
     visualizer.addTopic(f"{mxid} Detections", detector.out, group=mxid)
 
-    print(f"        Device pipeline for {mxid} configured.")
+    print(f"        Pipeline for {mxid} configured. Ready to be started.")
     return {
         "device": device_instance,
         "pipeline": pipeline,
@@ -110,19 +117,21 @@ def main():
 
     visualizer = dai.RemoteConnection(httpPort=app_config.HTTP_PORT)
 
-    d = dai.Device(devices_to_setup_info[0])
-    print(f"\nConnected to device {d.getDeviceId()} for main pipeline.\n")
-    pipeline = dai.Pipeline(d)
-    fusion_manager = pipeline.create(FusionManager, all_cam_extrinsics)
+    main_device = dai.Device(devices_to_setup_info[0])
+    print(f"\nSuccessfully connected to device {main_device.getDeviceId()} for main pipeline.")
+    pipeline = dai.Pipeline(main_device)
+    fusion_manager = pipeline.create(FusionManager, all_cam_extrinsics, args.fps_limit)
 
-    initialized_setups: List[Dict[str, Any]] = []
-    for dev_info in devices_to_setup_info:
-        setup_info = setup_device_pipeline(dev_info, visualizer, fusion_manager, d, main_pipeline=pipeline)
-        if setup_info:
-            initialized_setups.append(setup_info)
-        else:
-            print(f"--- Failed to set up device {dev_info.getDeviceId()}. Skipping. ---")
-
+    configured_pipeline_builder = partial(
+        setup_device_pipeline,
+        fusion_manager=fusion_manager,
+        main_device=main_device,
+        main_pipeline=pipeline,
+        fps_limit=args.fps_limit
+    )
+    initialized_setups: List[Dict[str, Any]] = setup_devices(
+        available_devices_info, visualizer, configured_pipeline_builder
+    )
     if not initialized_setups: print("No devices were successfully set up. Exiting."); return
     
     bev = pipeline.create(BirdsEyeView).build(
@@ -131,9 +140,9 @@ def main():
     )
 
     visualizer.addTopic("BEV Canvas", bev.canvas, group="BEV")
-    visualizer.addTopic("BEV Detections", bev.detections, group="BEV")
     visualizer.addTopic("BEV Cameras", bev.cameras_pos, group="BEV")
     visualizer.addTopic("BEV History Trails", bev.history_trails, group="BEV")
+    visualizer.addTopic("BEV Detections", bev.detections, group="BEV")
 
     active_device_pipelines_info: List[Dict[str, Any]] = start_pipelines(initialized_setups, visualizer)
     if not active_device_pipelines_info: print("No device pipelines are active. Exiting."); return

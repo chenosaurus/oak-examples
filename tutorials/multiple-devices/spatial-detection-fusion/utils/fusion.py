@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Deque
 from .detection_object import WorldDetection
 
 class FusionManager(dai.node.ThreadedHostNode):
-    def __init__(self, all_cam_extrinsics: Dict[str, Dict[str, Any]]) -> None:
+    def __init__(self, all_cam_extrinsics: Dict[str, Dict[str, Any]], fps: int) -> None:
         super().__init__()
 
         self.inputs: Dict[str, dai.Node.Input] = {}
@@ -35,8 +35,10 @@ class FusionManager(dai.node.ThreadedHostNode):
 
         self.detection_buffer: Dict[int, List[WorldDetection]] = collections.defaultdict(list)
         self.timestamp_queue: Deque[int] = collections.deque()
-        self.timeout = 0.05 # seconds
-        self.time_window_ms = 10 # time window for grouping near-simultaneous detections
+
+        frame_time_ms = 1000 / fps # time for one frame in milliseconds
+        self.time_window_ms = frame_time_ms * 0.8  # time window for grouping near-simultaneous detections
+        self.timeout = frame_time_ms / 1000 # timeout for fusion in seconds
         self.latest_device_timestamp_ms = 0
 
     def run(self):
