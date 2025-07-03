@@ -136,7 +136,12 @@ def main():
         f"\nSuccessfully connected to device {main_device.getDeviceId()} for main pipeline."
     )
     pipeline = dai.Pipeline(main_device)
-    fusion_manager = pipeline.create(FusionManager, all_cam_extrinsics, args.fps_limit)
+    fusion_manager = pipeline.create(
+        FusionManager,
+        all_cam_extrinsics,
+        args.fps_limit,
+        app_config.distance_threshold_m,
+    )
 
     configured_pipeline_builder = partial(
         setup_device_pipeline,

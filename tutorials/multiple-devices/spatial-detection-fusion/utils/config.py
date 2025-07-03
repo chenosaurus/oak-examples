@@ -12,4 +12,5 @@ nn_input_size = (512, 288)  # Should match the chosen YOLOv6 model's input size
 
 # specific labels to show in the BEV / empty labels to show all
 bev_labels = ["bottle"]
-# bev_labels = ['person'] # example showing just labels with person
+
+distance_threshold_m = 0.5  # Distance threshold for grouping detections in meters

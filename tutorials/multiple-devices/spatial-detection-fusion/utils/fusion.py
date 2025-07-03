@@ -4,14 +4,20 @@ import datetime
 import pickle
 import collections
 import numpy as np
-from typing import Dict, List, Any, Deque
+import bisect
+from typing import Dict, List, Any
 from scipy.optimize import linear_sum_assignment
 
 from .detection_object import WorldDetection
 
 
 class FusionManager(dai.node.ThreadedHostNode):
-    def __init__(self, all_cam_extrinsics: Dict[str, Dict[str, Any]], fps: int) -> None:
+    def __init__(
+        self,
+        all_cam_extrinsics: Dict[str, Dict[str, Any]],
+        fps: int,
+        distance_threshold: float,
+    ) -> None:
         super().__init__()
 
         self.inputs: Dict[str, dai.Node.Input] = {}
@@ -40,7 +46,7 @@ class FusionManager(dai.node.ThreadedHostNode):
         self.detection_buffer: Dict[int, List[WorldDetection]] = (
             collections.defaultdict(list)
         )
-        self.timestamp_queue: Deque[int] = collections.deque()
+        self.timestamp_queue: List[int] = []
 
         frame_time_ms = 1000 / fps  # time for one frame in milliseconds
         self.time_window_ms = (
@@ -48,6 +54,10 @@ class FusionManager(dai.node.ThreadedHostNode):
         )  # time window for grouping near-simultaneous detections
         self.timeout = frame_time_ms / 1000  # timeout for fusion in seconds
         self.latest_device_timestamp_ms = 0
+
+        self.distance_threshold_m = (
+            distance_threshold  # Distance threshold for grouping detections in meters
+        )
 
     def run(self):
         while True:
@@ -77,9 +87,9 @@ class FusionManager(dai.node.ThreadedHostNode):
             )
 
             self.detection_buffer[ts_ms].extend(world_dets)
+
             if ts_ms not in self.timestamp_queue:
-                self.timestamp_queue.append(ts_ms)
-                self.timestamp_queue = collections.deque(sorted(self.timestamp_queue))
+                bisect.insort(self.timestamp_queue, ts_ms)
 
     def _process_buffer(self):
         """
@@ -92,13 +102,13 @@ class FusionManager(dai.node.ThreadedHostNode):
         oldest_ts_ms = self.timestamp_queue[0]
 
         if (self.latest_device_timestamp_ms - oldest_ts_ms) / 1000 > self.timeout:
-            start_ts = self.timestamp_queue[0]
+            start_ts = self.timestamp_queue.pop(0)
             end_ts = start_ts + self.time_window_ms
 
-            all_detections_in_window = []
+            all_detections_in_window = self.detection_buffer.pop(start_ts, [])
 
             while self.timestamp_queue and self.timestamp_queue[0] <= end_ts:
-                ts_to_pop = self.timestamp_queue.popleft()
+                ts_to_pop = self.timestamp_queue.pop(0)
                 all_detections_in_window.extend(
                     self.detection_buffer.pop(ts_to_pop, [])
                 )
@@ -172,6 +182,10 @@ class FusionManager(dai.node.ThreadedHostNode):
     def _group_detections(
         self, detections: List[WorldDetection]
     ) -> List[List[WorldDetection]]:
+        """
+        Groups detections using the Hungarian algorithm for optimal assignment,
+        then finds connected components to form final groups.
+        """
         if not detections:
             return []
 
@@ -182,61 +196,43 @@ class FusionManager(dai.node.ThreadedHostNode):
         all_groups = []
 
         for _, dets in detections_by_label.items():
-            if len(dets) <= 1:
+            num_dets = len(dets)
+            if num_dets <= 1:
                 all_groups.append(dets)
                 continue
 
-            # cost matrix basd on 3D distance
-            num_dets = len(dets)
             cost_matrix = np.full((num_dets, num_dets), np.inf)
             for i in range(num_dets):
-                for j in range(num_dets):
-                    if i == j:
-                        continue
+                for j in range(i + 1, num_dets):
                     dist = np.linalg.norm(
                         dets[i].pos_world_homogeneous[:3]
                         - dets[j].pos_world_homogeneous[:3]
                     )
                     cost_matrix[i, j] = dist
+                    cost_matrix[j, i] = dist
 
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
-            visited = set()
-            distance_threshold = 0.5  # max distance in meters for a valid pairing
-
+            adj = collections.defaultdict(list)
             for r, c in zip(row_ind, col_ind):
-                if r in visited or c in visited:
-                    continue
+                if r < c and cost_matrix[r, c] < self.distance_threshold_m:
+                    adj[r].append(c)
+                    adj[c].append(r)
 
-                cost = cost_matrix[r, c]
-                if cost > distance_threshold:
-                    continue
+            visited = set()
+            for i in range(num_dets):
+                if i not in visited:
+                    current_group_indices = []
+                    q = collections.deque([i])
+                    visited.add(i)
+                    while q:
+                        u = q.popleft()
+                        current_group_indices.append(u)
+                        for v in adj.get(u, []):
+                            if v not in visited:
+                                visited.add(v)
+                                q.append(v)
 
-                # this is a valid pair, start a new group
-                group = {dets[r], dets[c]}
-                visited.add(dets[r])
-                visited.add(dets[c])
-
-                q = collections.deque([dets[r], dets[c]])
-                while q:
-                    current_det = q.popleft()
-                    # find other detections linked to the current one
-                    for idx in np.where(row_ind == dets.index(current_det))[0]:
-                        partner_idx = col_ind[idx]
-                        if (
-                            dets[partner_idx] not in visited
-                            and cost_matrix[dets.index(current_det), partner_idx]
-                            < distance_threshold
-                        ):
-                            group.add(dets[partner_idx])
-                            visited.add(dets[partner_idx])
-                            q.append(dets[partner_idx])
-
-                all_groups.append(list(group))
-
-            # add any detections that were not part of any group as their own group
-            for det in dets:
-                if det not in visited:
-                    all_groups.append([det])
+                    all_groups.append([dets[idx] for idx in current_group_indices])
 
         return all_groups
