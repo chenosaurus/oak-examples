@@ -1,4 +1,5 @@
 import depthai as dai
+from depthai_nodes.utils import AnnotationHelper
 import numpy as np
 import pickle
 import collections
@@ -6,7 +7,6 @@ from typing import Dict, List, Any
 
 from . import config
 from .detection_object import WorldDetection
-from .annotation_helper import AnnotationHelper
 
 
 class BirdsEyeView(dai.node.HostNode):

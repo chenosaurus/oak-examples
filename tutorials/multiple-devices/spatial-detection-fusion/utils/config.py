@@ -11,6 +11,7 @@ nn_model_slug = "luxonis/yolov6-nano:r2-coco-512x288"
 nn_input_size = (512, 288)  # Should match the chosen YOLOv6 model's input size
 
 # specific labels to show in the BEV / empty labels to show all
-bev_labels = ["bottle"]
+bev_labels = []  # Show all labels by default
+# bev_labels = ["bottle"]
 
 distance_threshold_m = 0.5  # Distance threshold for grouping detections in meters
