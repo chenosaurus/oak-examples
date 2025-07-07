@@ -130,7 +130,7 @@ def run_example(example_dir: Path, args: Dict) -> bool:
             logger.debug(f"[app output]: {line}")
 
             # Look for build error in logs
-            if "BuilderError" in line:
+            if "Failed to read develop logs" in line:
                 process.terminate()
                 logger.error(f"Error during build: {line}")
                 return False
@@ -216,7 +216,7 @@ def connect_to_device(device: str, device_password: str):
             timeout=connect_timeout,
         )
         device_info = re.sub(r"\s+", " ", result.stdout.decode().strip())
-        logger.debug(f"Connected to device: {device_info}")
+        logger.debug(f"Connected to device using password: {device_info}")
         return True
     except subprocess.CalledProcessError as e:
         log = "Failed to connect to device using password"
@@ -237,7 +237,7 @@ def connect_to_device(device: str, device_password: str):
             timeout=connect_timeout,
         )
         device_info = re.sub(r"\s+", " ", result.stdout.decode().strip())
-        logger.debug(f"Connected to device: {device_info}")
+        logger.debug(f"Connected to device using device IP: {device_info}")
         return True
     except subprocess.CalledProcessError as e:
         log = f"Failed to connect to device using IP `{device}`"
