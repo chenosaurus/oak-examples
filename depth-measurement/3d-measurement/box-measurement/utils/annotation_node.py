@@ -1,14 +1,14 @@
 import depthai as dai
 import numpy as np
 import cv2
-from utils.utils_box import reverse_resize_and_pad
+from .utils_box import reverse_resize_and_pad
 import time
 import cProfile 
 import pstats
 import io
 
-from utils.img_annotation_helper import AnnotationHelper
-from utils.CuboidFitter import CuboidFitter
+from depthai_nodes.utils import AnnotationHelper
+from .CuboidFitter import CuboidFitter
 
 NN_WIDTH, NN_HEIGHT = 512, 320
 INPUT_SHAPE = (NN_WIDTH, NN_HEIGHT)
