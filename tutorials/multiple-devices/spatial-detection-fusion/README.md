@@ -10,12 +10,6 @@ This example demonstrates a multiple Luxonis OAK cameras setup that detects obje
 
 > Before you can run this demo you need to calibrate the cameras, the goal is to figure out the exact position and orientation of every camera relative to each other, so the application can fuse their individual views into a single, unified "world". Go to [multi-cam-calibration](../multi-cam-calibration) and generate a calibration file for each camera. Once calibration is complete, do not move your cameras. If you do, you will need to re-calibrate. Make sure that the `calibration_data_dir` in the [`config.py`](config.py) is set correctly.
 
-The system employs a *main device* architecture. Upon launch, the first available OAK camera is designated as the central processing hub.
-
-- **Main Device**: This camera is responsible for more than just its own detections. It also runs the FusionManager and BirdsEyeView HostNodes. This means all the complex data merging and visualization logic happens on this one device.
-
-- **Secondary Devices**: All other connected cameras act as secondary data sources. They perform their own spatial detection and then stream their results directly to the FusionManager running on the main device's pipeline.
-
 The program will also print the USB speed and connected camera sockets for each connected device before starting its pipeline. Below is an example output:
 
 ```
@@ -66,7 +60,13 @@ You can simply install them by running:
 pip install -r requirements.txt
 ```
 
-#### Examples
+The system employs a *main device* architecture. Upon launch, the first available OAK device is designated as the central communication hub.
+
+- **Main Device**: This camera is responsible for more than just its own detections, it also facilitates the communication of the `HostNode`s (`FusionManager` and `BirgsEyeView`).
+
+- **Secondary Devices**: All other connected cameras act as secondary data sources. They perform their own spatial detection and then stream their results directly to the `FusionManager` running on the main device's pipeline.
+
+### Examples
 
 ```bash
 python main.py

@@ -52,7 +52,7 @@ def setup_device_pipeline(
 
     platform = device_instance.getPlatformAsString()
     model_description = dai.NNModelDescription(
-        app_config.nn_model_slug, platform=platform
+        app_config.NN_MODEL_SLUG, platform=platform
     )
     nn_archive = dai.NNArchive(dai.getModelFromZoo(model_description, useCached=False))
     nn_input_size = nn_archive.getInputSize()
@@ -74,7 +74,7 @@ def setup_device_pipeline(
     )
     stereo = pipeline.create(dai.node.StereoDepth).build(
         left=left_cam.requestOutput(nn_input_size, fps=fps_limit),
-        right=right_cam.requestOutput(nn_input_size),
+        right=right_cam.requestOutput(nn_input_size, fps=fps_limit),
         presetMode=dai.node.StereoDepth.PresetMode.HIGH_DETAIL,
     )
     stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
@@ -118,7 +118,7 @@ def main():
     print(f"Found {len(available_devices_info)} DepthAI devices to configure.")
 
     all_cam_extrinsics = load_extrinsics_for_devices(
-        available_devices_info, config.calibration_data_dir
+        available_devices_info, config.CALIBRATION_DATA_DIR
     )
     if not all_cam_extrinsics:
         print("No extrinsic calibrations loaded. BEV cannot function. Exiting.")
@@ -140,7 +140,7 @@ def main():
         FusionManager,
         all_cam_extrinsics,
         args.fps_limit,
-        app_config.distance_threshold_m,
+        app_config.DISTANCE_THRESHOLD_M,
     )
 
     configured_pipeline_builder = partial(

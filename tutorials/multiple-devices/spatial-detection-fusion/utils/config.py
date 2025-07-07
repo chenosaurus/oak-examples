@@ -1,17 +1,17 @@
-bev_width = 800
-bev_height = 800
-bev_scale = 100.0  # pixels per meter
-trail_length = 150  # Number of historical points to show for object trails
+BEV_WIDTH = 800
+BEV_HEIGHT = 800
+BEV_SCALE = 100.0  # pixels per meter
+TRAIL_LENGTH = 150  # Number of historical points to show for object trails
 
 HTTP_PORT = 8082
-calibration_data_dir = "calibration_data"
+CALIBRATION_DATA_DIR = "calibration_data"
 
-nn_model_slug = "luxonis/yolov6-nano:r2-coco-512x288"
+NN_MODEL_SLUG = "luxonis/yolov6-nano:r2-coco-512x288"
 
-nn_input_size = (512, 288)  # Should match the chosen YOLOv6 model's input size
+NN_INPUT_SIZE = (512, 288)  # Should match the chosen YOLOv6 model's input size
 
 # specific labels to show in the BEV / empty labels to show all
-bev_labels = []  # Show all labels by default
+BEV_LABELS = []  # Show all labels by default
 # bev_labels = ["bottle"]
 
-distance_threshold_m = 0.5  # Distance threshold for grouping detections in meters
+DISTANCE_THRESHOLD_M = 0.5  # Distance threshold for grouping detections in meters

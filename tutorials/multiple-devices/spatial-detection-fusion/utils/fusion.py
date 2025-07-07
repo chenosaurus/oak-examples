@@ -1,7 +1,6 @@
 import depthai as dai
 import time
 import datetime
-import pickle
 import collections
 import numpy as np
 import bisect
@@ -9,6 +8,16 @@ from typing import Dict, List, Any
 from scipy.optimize import linear_sum_assignment
 
 from .detection_object import WorldDetection
+
+
+class DetectionGroupBuffer(dai.Buffer):
+    """
+    A custom buffer class to hold fused detection groups directly.
+    """
+
+    def __init__(self, groups: List[List[WorldDetection]]):
+        super().__init__()
+        self.groups = groups
 
 
 class FusionManager(dai.node.ThreadedHostNode):
@@ -20,6 +29,7 @@ class FusionManager(dai.node.ThreadedHostNode):
     ) -> None:
         super().__init__()
 
+        self.fps = fps
         self.inputs: Dict[str, dai.Node.Input] = {}
 
         self.output = self.createOutput(
@@ -48,7 +58,7 @@ class FusionManager(dai.node.ThreadedHostNode):
         )
         self.timestamp_queue: List[int] = []
 
-        frame_time_ms = 1000 / fps  # time for one frame in milliseconds
+        frame_time_ms = 1000 / self.fps  # time for one frame in milliseconds
         self.time_window_ms = (
             frame_time_ms * 0.8
         )  # time window for grouping near-simultaneous detections
@@ -60,10 +70,10 @@ class FusionManager(dai.node.ThreadedHostNode):
         )
 
     def run(self):
-        while True:
+        while self.isRunning():
             self._read_inputs()
             self._process_buffer()
-            time.sleep(0.002)
+            time.sleep(0.75 / self.fps)
 
     def _read_inputs(self):
         """Read all available detections from input queues and buffer them."""
@@ -119,9 +129,7 @@ class FusionManager(dai.node.ThreadedHostNode):
             groups = self._group_detections(all_detections_in_window)
             pruned_groups = self._prune_redundant_detections(groups)
 
-            data_bytes = pickle.dumps(pruned_groups)
-            buffer = dai.Buffer()
-            buffer.setData(bytearray(data_bytes))  # type: ignore
+            buffer = DetectionGroupBuffer(pruned_groups)
             buffer.setTimestamp(datetime.timedelta(milliseconds=start_ts))
             self.output.send(buffer)
 

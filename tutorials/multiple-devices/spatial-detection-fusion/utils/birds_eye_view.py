@@ -1,12 +1,12 @@
 import depthai as dai
 from depthai_nodes.utils import AnnotationHelper
 import numpy as np
-import pickle
 import collections
 from typing import Dict, List, Any
 
 from . import config
 from .detection_object import WorldDetection
+from .fusion import DetectionGroupBuffer
 
 
 class BirdsEyeView(dai.node.HostNode):
@@ -46,11 +46,11 @@ class BirdsEyeView(dai.node.HostNode):
     ) -> "BirdsEyeView":
         self.all_cam_extrinsics = all_cam_extrinsics
         self.width, self.height, self.scale = (
-            config.bev_width,
-            config.bev_height,
-            config.bev_scale,
+            config.BEV_WIDTH,
+            config.BEV_HEIGHT,
+            config.BEV_SCALE,
         )
-        self.history = collections.deque(maxlen=config.trail_length)
+        self.history = collections.deque(maxlen=config.TRAIL_LENGTH)
         self.world_to_bev_transform = np.array(
             [[self.scale, 0, 0, self.width / 2], [0, self.scale, 0, self.height / 2]]
         )
@@ -66,16 +66,15 @@ class BirdsEyeView(dai.node.HostNode):
         return self
 
     def process(self, detections_buffer: dai.Buffer):
-        groups: List[List[WorldDetection]] = pickle.loads(
-            detections_buffer.getData().tobytes()
-        )
-        if config.bev_labels:
+        assert isinstance(detections_buffer, DetectionGroupBuffer)
+        groups: List[List[WorldDetection]] = detections_buffer.groups
+        if config.BEV_LABELS:
             filtered_groups = [
                 filtered_grp
                 for grp in groups
                 if (
                     filtered_grp := [
-                        det for det in grp if det.label.lower() in config.bev_labels
+                        det for det in grp if det.label.lower() in config.BEV_LABELS
                     ]
                 )
             ]
