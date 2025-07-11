@@ -101,6 +101,14 @@ def setup_virtual_env(
     EnvBuilder(clear=True, with_pip=True).create(venv_dir)
     env_exe = venv_dir / "bin" / "python3"
 
+    # Read original requirements
+    with open(requirements_path, "r") as f:
+        requirements_text = f.read()
+
+    # Check if depthai or depthai-nodes are in the original requirements
+    install_depthai_nodes = "depthai-nodes" in requirements_text
+    install_depthai = "depthai" in requirements_text
+
     try:
         # Step 1: Install all base requirements (ignoring version constraints)
         subprocess.run(
@@ -120,7 +128,7 @@ def setup_virtual_env(
         )
 
         # Step 2: Conditionally override with specific depthai-nodes version
-        if depthai_nodes_version:
+        if install_depthai_nodes and depthai_nodes_version:
             logger.debug(
                 f"Trying to install specific depthai-nodes version: {depthai_nodes_version}"
             )
@@ -130,15 +138,13 @@ def setup_virtual_env(
                     "-m",
                     "pip",
                     "install",
-                    f"depthai-nodes=={depthai_nodes_version}"
-                    if "==" in depthai_nodes_version
-                    else depthai_nodes_version,
+                    f"depthai-nodes=={depthai_nodes_version}",
                 ],
                 check=True,
             )
 
         # Step 3: Conditionally override with specific depthai version
-        if depthai_version:
+        if install_depthai and depthai_version:
             logger.debug(
                 f"Trying to install specific depthai version: {depthai_version}"
             )
