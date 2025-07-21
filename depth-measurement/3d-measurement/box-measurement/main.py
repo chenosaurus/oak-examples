@@ -1,4 +1,3 @@
-import time
 import depthai as dai
 import argparse
 
