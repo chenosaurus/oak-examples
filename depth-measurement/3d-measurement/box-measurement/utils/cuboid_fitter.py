@@ -3,6 +3,7 @@ import open3d as o3d
 from itertools import combinations
 from typing import List, Tuple, Optional
 
+
 class CuboidFitter:
     """
     A class to fit a 3D cuboid to a point cloud.
@@ -11,7 +12,15 @@ class CuboidFitter:
     three orthogonal planes. It can then calculate the dimensions and corners
     of the fitted cuboid.
     """
-    def __init__(self, distance_threshold: float = 10, sample_points: int = 3, max_iterations: int = 500, voxel_size: float = 10, max_attempts: int = 20):
+
+    def __init__(
+        self,
+        distance_threshold: float = 10,
+        sample_points: int = 3,
+        max_iterations: int = 500,
+        voxel_size: float = 10,
+        max_attempts: int = 20,
+    ):
         """
         Initializes the CuboidFitter.
 
@@ -39,17 +48,19 @@ class CuboidFitter:
         self.reset()
 
     def update_point_cloud(self, points: np.ndarray) -> None:
-        """ 
-        Updates the Open3D point cloud data using an internal buffer, which makes execution faster. 
-        
+        """
+        Updates the Open3D point cloud data using an internal buffer, which makes execution faster.
+
         Args:
             points (np.ndarray): A NumPy array of 3D points.
         """
         if points.shape[0] > self.points_buffer.shape[0]:
             self.points_buffer = np.empty((points.shape[0], 3), dtype=np.float64)
 
-        np.copyto(self.points_buffer[:points.shape[0]], points)
-        self.point_cloud.points = o3d.utility.Vector3dVector(self.points_buffer[:points.shape[0]])
+        np.copyto(self.points_buffer[: points.shape[0]], points)
+        self.point_cloud.points = o3d.utility.Vector3dVector(
+            self.points_buffer[: points.shape[0]]
+        )
 
     def reset(self) -> None:
         """
@@ -60,8 +71,10 @@ class CuboidFitter:
         self.center = None
         self.planes = []
         self.plane_points = []
-    
-    def set_point_cloud(self, pcl_points: np.ndarray, colors: Optional[np.ndarray] = None) -> None:
+
+    def set_point_cloud(
+        self, pcl_points: np.ndarray, colors: Optional[np.ndarray] = None
+    ) -> None:
         """
         Sets the point cloud for the fitter, applying filtering and downsampling.
 
@@ -73,15 +86,19 @@ class CuboidFitter:
         self.update_point_cloud(pcl_points)
         if colors is not None:
             self.point_cloud.colors = o3d.utility.Vector3dVector(colors / 255.0)
-        
-        self.point_cloud = self.point_cloud.voxel_down_sample(voxel_size=self.voxel_size)
-        self.point_cloud, _ = self.point_cloud.remove_statistical_outlier(40, 0.1) 
-        
+
+        self.point_cloud = self.point_cloud.voxel_down_sample(
+            voxel_size=self.voxel_size
+        )
+        self.point_cloud, _ = self.point_cloud.remove_statistical_outlier(40, 0.1)
+
         filtered_points, filtered_colors = self.MAD_filtering(self.point_cloud)
         self.point_cloud.colors = o3d.utility.Vector3dVector(filtered_colors)
         self.point_cloud.points = o3d.utility.Vector3dVector(filtered_points)
 
-    def MAD_filtering(self, pcl: o3d.geometry.PointCloud, k: int = 3) -> Tuple[np.ndarray, np.ndarray]:
+    def MAD_filtering(
+        self, pcl: o3d.geometry.PointCloud, k: int = 3
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Filters the point cloud using the Median Absolute Deviation (MAD) method.
 
@@ -95,7 +112,7 @@ class CuboidFitter:
             tuple[np.ndarray, np.ndarray]: A tuple containing the filtered points and colors.
         """
         colors = np.asarray(pcl.colors)
-        points = np.asarray(pcl.points)    
+        points = np.asarray(pcl.points)
         if points.shape[0] == 0:
             return np.array([]), np.array([])
 
@@ -103,15 +120,17 @@ class CuboidFitter:
         distances = np.linalg.norm(points - median_point, axis=1)
         median_distance = np.median(distances)
         mad = np.median(np.abs(distances - median_distance))
-        
+
         if mad == 0:
             mask = np.ones_like(distances, dtype=bool)
         else:
             mask = np.abs(distances - median_distance) < k * mad
-        
+
         return points[mask], colors[mask]
 
-    def distance_between_planes(self, plane1: np.ndarray, plane2: np.ndarray) -> Optional[float]:
+    def distance_between_planes(
+        self, plane1: np.ndarray, plane2: np.ndarray
+    ) -> Optional[float]:
         """
         Calculates the distance between two parallel planes.
 
@@ -126,7 +145,11 @@ class CuboidFitter:
         normal2 = np.array(plane2[:3])
         norm1 = np.linalg.norm(normal1)
         norm2 = np.linalg.norm(normal2)
-        if norm1 == 0 or norm2 == 0 or not np.allclose(normal1 / norm1, normal2 / norm2, atol=1e-6):
+        if (
+            norm1 == 0
+            or norm2 == 0
+            or not np.allclose(normal1 / norm1, normal2 / norm2, atol=1e-6)
+        ):
             return None
         return abs(plane2[3] / norm2 - plane1[3] / norm1)
 
@@ -143,16 +166,22 @@ class CuboidFitter:
         planes = np.asarray(self.planes)
         normal = planes[:, :3]
         norm = np.linalg.norm(normal, axis=1, keepdims=True)
-        
+
         s = np.sign(normal[:, 2])
-        s[s==0] = 1
+        s[s == 0] = 1
 
         normalized_normal = normal / norm
-        
+
         translated_d = planes[:, 3] - s * distances
         return np.column_stack((normalized_normal, translated_d))
 
-    def intersect_planes(self, plane_eq1: np.ndarray, plane_eq2: np.ndarray, plane_eq3: np.ndarray, tol: float = 1e-6) -> Optional[np.ndarray]:
+    def intersect_planes(
+        self,
+        plane_eq1: np.ndarray,
+        plane_eq2: np.ndarray,
+        plane_eq3: np.ndarray,
+        tol: float = 1e-6,
+    ) -> Optional[np.ndarray]:
         """
         Finds the intersection point of three planes.
 
@@ -199,21 +228,22 @@ class CuboidFitter:
         """
         if len(self.point_cloud.points) < self.sample_points:
             return None, None, False
-        
+
         try:
             plane_eq, plane_inliers = self.point_cloud.segment_plane(
-                self.distance_threshold, self.sample_points, self.max_iterations)
+                self.distance_threshold, self.sample_points, self.max_iterations
+            )
         except RuntimeError:
-             return None, None, False
+            return None, None, False
 
         inlier_count = len(plane_inliers)
         if len(self.point_cloud.points) == 0:
             return None, None, False
         inlier_ratio = inlier_count / len(self.point_cloud.points)
-        
+
         if inlier_ratio >= 0.2:
             return np.array(plane_eq), plane_inliers, True
-        
+
         return None, None, False
 
     def check_orthogonal(self, plane_eq1: np.ndarray, plane_eq2: np.ndarray) -> bool:
@@ -233,7 +263,13 @@ class CuboidFitter:
         norm2 = np.linalg.norm(normal2)
         if norm1 == 0 or norm2 == 0:
             return False
-        return bool(np.isclose(np.dot(normal1, normal2) / (norm1 * norm2), 0, atol=self.orthogonality_thr))
+        return bool(
+            np.isclose(
+                np.dot(normal1, normal2) / (norm1 * norm2),
+                0,
+                atol=self.orthogonality_thr,
+            )
+        )
 
     def fit_orthogonal_planes(self) -> bool:
         """
@@ -257,12 +293,16 @@ class CuboidFitter:
                 continue
 
             attempts += 1
-            if all(self.check_orthogonal(plane_eq, existing) for existing in self.planes):
+            if all(
+                self.check_orthogonal(plane_eq, existing) for existing in self.planes
+            ):
                 self.planes.append(plane_eq)
                 points = self.point_cloud.select_by_index(inliers)
                 self.plane_points.append(points)
-                self.point_cloud = self.point_cloud.select_by_index(inliers, invert=True)
-        
+                self.point_cloud = self.point_cloud.select_by_index(
+                    inliers, invert=True
+                )
+
         return len(self.planes) == 3
 
     def calculate_dimensions_corners_MAD(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -277,27 +317,33 @@ class CuboidFitter:
 
         distances = np.zeros(len(self.planes))
         for i, plane in enumerate(self.planes):
-            if not self.plane_points or all(len(p.points) == 0 for p in self.plane_points):
+            if not self.plane_points or all(
+                len(p.points) == 0 for p in self.plane_points
+            ):
                 return np.array([0, 0, 0]), np.array([])
 
-            combined_points_list = [np.asarray(pts.points) for j, pts in enumerate(self.plane_points) if j != i and len(pts.points) > 0]
+            combined_points_list = [
+                np.asarray(pts.points)
+                for j, pts in enumerate(self.plane_points)
+                if j != i and len(pts.points) > 0
+            ]
             if not combined_points_list:
                 distances[i] = 0
                 continue
             combined_points = np.vstack(combined_points_list)
-            
+
             plane_distances = self.dist_to_plane(combined_points, plane)
             median_dist = np.median(plane_distances)
             mad = np.median(np.abs(plane_distances - median_dist))
-            
+
             threshold = median_dist + 2 * mad
             filtered_distances = [dist for dist in plane_distances if dist <= threshold]
-            
+
             if not filtered_distances:
                 distances[i] = median_dist
             else:
                 distances[i] = np.percentile(filtered_distances, 98)
-        
+
         translated_planes = self.translate_planes(distances)
         self.all_planes = np.vstack((self.planes, translated_planes))
 
@@ -306,16 +352,22 @@ class CuboidFitter:
             point = self.intersect_planes(*plane_comb)
             if point is not None:
                 self.corners.append(point)
-        
+
         if len(self.corners) < 8:
             return np.array([0, 0, 0]), np.array([])
 
-        dimensions = np.array([
-            self.distance_between_planes(self.planes[i], translated_planes[i]) / 10.0 for i in range(len(self.planes)) if self.distance_between_planes(self.planes[i], translated_planes[i]) is not None
-        ])
-        
+        dimensions = np.array(
+            [
+                self.distance_between_planes(self.planes[i], translated_planes[i])
+                / 10.0
+                for i in range(len(self.planes))
+                if self.distance_between_planes(self.planes[i], translated_planes[i])
+                is not None
+            ]
+        )
+
         if len(dimensions) < 3:
-            return np.array([0,0,0]), np.array(self.corners)
+            return np.array([0, 0, 0]), np.array(self.corners)
 
         sorted_dims = np.sort(dimensions)[::-1]
         return sorted_dims, np.array(self.corners)
@@ -337,9 +389,18 @@ class CuboidFitter:
         sorted_corners = self.sort_corners(corners)
         self.line_set.points = o3d.utility.Vector3dVector(sorted_corners)
         connections = [
-            [0, 1], [1, 2], [2, 3], [3, 0],
-            [4, 5], [5, 6], [6, 7], [7, 4],
-            [0, 4], [1, 5], [2, 6], [3, 7]
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
         ]
         self.line_set.lines = o3d.utility.Vector2iVector(connections)
         self.line_set.paint_uniform_color([1, 0, 0])
@@ -360,12 +421,14 @@ class CuboidFitter:
 
         z_idx = np.argmax([np.abs(np.dot(normal, global_z)) for normal in normals])
         z_normal = normals[z_idx]
-        
+
         remaining_indices = [i for i in range(3) if i != z_idx]
         if not remaining_indices:
             return np.identity(3)
 
-        x_idx = max(remaining_indices, key=lambda i: np.abs(np.dot(normals[i], global_x)))
+        x_idx = max(
+            remaining_indices, key=lambda i: np.abs(np.dot(normals[i], global_x))
+        )
         x_normal = normals[x_idx]
 
         y_idx_list = [i for i in remaining_indices if i != x_idx]
@@ -406,11 +469,11 @@ class CuboidFitter:
         """
         if self.center is None:
             self.center = np.mean(corners, axis=0)
-            
+
         R = self.create_R_from_normals()
         U, _, Vt = np.linalg.svd(R)
         R_orthogonal = np.dot(U, Vt)
-        
+
         centered_corners = corners - self.center
         rotated_corners = np.dot(centered_corners, R_orthogonal)
 

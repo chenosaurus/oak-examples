@@ -1,7 +1,10 @@
 import depthai as dai
 import numpy as np
 import cv2
-from depthai_nodes.message.img_detections import ImgDetectionExtended, ImgDetectionsExtended
+from depthai_nodes.message.img_detections import (
+    ImgDetectionExtended,
+    ImgDetectionsExtended,
+)
 from .helper_functions import reverse_resize_and_pad
 import time
 
@@ -13,20 +16,21 @@ INPUT_SHAPE = (NN_WIDTH, NN_HEIGHT)
 
 IMG_WIDTH, IMG_HEIGHT = 640, 400
 
+
 class BoxProcessingNode(dai.node.ThreadedHostNode):
     """Node for processing box detection and annotation."""
+
     def __init__(self):
         dai.node.ThreadedHostNode.__init__(self)
         self.inputPCL = self.createInput()
         self.inputRGB = self.createInput()
         self.inputDet = self.createInput()
 
-        self.outputPCL = self.createOutput()
-        self.outputANN  = self.createOutput()
-        self.outputANNCuboid  = self.createOutput()
+        self.outputANN = self.createOutput()
+        self.outputANNCuboid = self.createOutput()
 
         self.fitter = CuboidFitter()
-        self.intrinsics = tuple()  
+        self.intrinsics = tuple()
         self.fit = False
         self.helper_det = None
         self.helper_cuboid = None
@@ -40,31 +44,34 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
 
         if not np.any(binary):
             return
-        
-        # Extract mask contours to draw polygon lines 
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
+
+        # Extract mask contours to draw polygon lines
+        contours, _ = cv2.findContours(
+            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
         for cnt in contours:
-            
             # To smooth the mask for visualization (TO DO note: could use this approach for PCL filtering)
-            epsilon = 0.01 * cv2.arcLength(cnt, True)            
-            approx = cv2.approxPolyDP(cnt, epsilon, True)        
+            epsilon = 0.01 * cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, epsilon, True)
             pts = approx.reshape(-1, 2)
-            
-            #pts = cnt.reshape(-1, 2)                   # To keep original mask 
-            norm_pts = [(float(x)/w, float(y)/h) for x, y in pts]
+
+            # pts = cnt.reshape(-1, 2)                   # To keep original mask
+            norm_pts = [(float(x) / w, float(y) / h) for x, y in pts]
             self.helper_det.draw_polyline(
                 norm_pts,
-                outline_color=(1.0, 0.5, 0.5, 0.0),             # Color for mask outline
+                outline_color=(1.0, 0.5, 0.5, 0.0),  # Color for mask outline
                 fill_color=(1.0, 0.5, 0.5, 0.3),
                 thickness=1,
                 closed=True,
             )
-    
+
     def _draw_cuboid_outline(self, corners: np.ndarray):
         """Draws the cuboid outline in 3D space based on the corners."""
         if self.intrinsics is None or len(self.intrinsics) != 4:
-            print("ERROR: AnnotationNode.intrinsics not properly set or invalid length!")
+            print(
+                "ERROR: AnnotationNode.intrinsics not properly set or invalid length!"
+            )
             return
         fx, fy, cx_i, cy_i = self.intrinsics
 
@@ -79,20 +86,39 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
                 pts2d_norm.append((u, v))
 
         # draw edges
-        edges = [(0,1),(1,2),(2,3),(3,0), (4,5),(5,6),(6,7),(7,4), (0,4),(1,5),(2,6),(3,7)]
+        edges = [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ]
         for i, j in edges:
             if pts2d_norm[i] and pts2d_norm[j]:
                 self.helper_cuboid.draw_line(
                     pts2d_norm[i],
                     pts2d_norm[j],
-                    color=(0.0, 1.0, 0.0, 1.0),         # Green
+                    color=(0.0, 1.0, 0.0, 1.0),  # Green
                     thickness=3,
                 )
 
-    def _fit_cuboid(self, idx: int, mask: np.ndarray, pcl: np.ndarray, pcl_color: np.ndarray,):
+    def _fit_cuboid(
+        self,
+        idx: int,
+        mask: np.ndarray,
+        pcl: np.ndarray,
+        pcl_color: np.ndarray,
+    ):
         """Fits cuboid and draws its 3D outline as lines."""
 
-        mask_bool = (mask == idx) 
+        mask_bool = mask == idx
         pts3d = pcl.reshape((IMG_HEIGHT, IMG_WIDTH, 3))[mask_bool]
         cols = cv2.cvtColor(pcl_color, cv2.COLOR_BGR2RGB)[mask_bool]
 
@@ -125,7 +151,7 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
         angle = rr.angle
 
         self.helper_det.draw_rotated_rect(
-            (cx, cy), 
+            (cx, cy),
             (w, h),
             angle,
             fill_color=None,
@@ -138,8 +164,9 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
 
         if self.fit:
             label = (
-            f"Box ({det._confidence:.2f}) "
-            f"{self.dimensions[0]:.1f} x {self.dimensions[1]:.1f} x {self.dimensions[2]:.1f} cm")
+                f"Box ({det._confidence:.2f}) "
+                f"{self.dimensions[0]:.1f} x {self.dimensions[1]:.1f} x {self.dimensions[2]:.1f} cm"
+            )
 
         else:
             label = f"{'Box'} {det._confidence:.2f}"
@@ -149,8 +176,10 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
             corner0,
             size=18,
         )
-    
-    def _annotate_detection(self, det: ImgDetectionExtended, idx: int, mask: np.ndarray, pcl, pcl_colors):
+
+    def _annotate_detection(
+        self, det: ImgDetectionExtended, idx: int, mask: np.ndarray, pcl, pcl_colors
+    ):
         """Draw all annotations (mask, 3D box fit, bounding box + label) for a single detection."""
         self._draw_mask(mask, idx)
 
@@ -165,8 +194,10 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
             det_msg = self.inputDet.get()
 
             if pcl_msg is None or rgb_msg is None or det_msg is None:
-                print(f"AnnotationNode: Missing messages - PCL: {pcl_msg is None}, RGB: {rgb_msg is None}, Det: {det_msg is None}")
-                time.sleep(0.005) 
+                print(
+                    f"AnnotationNode: Missing messages - PCL: {pcl_msg is None}, RGB: {rgb_msg is None}, Det: {det_msg is None}"
+                )
+                time.sleep(0.005)
                 continue
 
             assert isinstance(pcl_msg, dai.PointCloudData)
@@ -177,16 +208,18 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
             parser_output: ImgDetectionsExtended = det_msg
 
             try:
-                points, colors = inPointCloud.getPointsRGB() 
+                points, colors = inPointCloud.getPointsRGB()
                 if points is None:
-                    print(f"AnnotationNode: Empty PCL points array.")
+                    print("AnnotationNode: Empty PCL points array.")
                     continue
 
                 rgba_img = colors.reshape(IMG_HEIGHT, IMG_WIDTH, 4)
                 bgr_img = cv2.cvtColor(rgba_img, cv2.COLOR_BGRA2BGR)
                 mask = parser_output._masks._mask
                 detections = parser_output.detections
-                mask_full = reverse_resize_and_pad(mask, (IMG_WIDTH, IMG_HEIGHT), INPUT_SHAPE) # This is still a heavy operation
+                mask_full = reverse_resize_and_pad(
+                    mask, (IMG_WIDTH, IMG_HEIGHT), INPUT_SHAPE
+                )  # This is still a heavy operation
 
                 timestamp = inPointCloud.getTimestamp()
                 seq_num = inPointCloud.getSequenceNum()
@@ -197,14 +230,17 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
                 for idx, det in enumerate(detections):
                     self._annotate_detection(det, idx, mask_full, points, bgr_img)
 
-                ann_msg = self.helper_det.build(timestamp, seq_num) 
+                ann_msg = self.helper_det.build(timestamp, seq_num)
                 ann_msg_cuboid = self.helper_cuboid.build(timestamp, seq_num)
 
                 self.outputANN.send(ann_msg)
                 self.outputANNCuboid.send(ann_msg_cuboid)
 
             except Exception as e:
-                print(f"AnnotationNode: Error during processing frame (Seq {inRGB.getSequenceNum()}): {e}")
+                print(
+                    f"AnnotationNode: Error during processing frame (Seq {inRGB.getSequenceNum()}): {e}"
+                )
                 import traceback
+
                 traceback.print_exc()
                 continue

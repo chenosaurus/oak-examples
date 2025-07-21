@@ -2,15 +2,19 @@ import cv2
 import depthai as dai
 import numpy as np
 
+
 def read_intrinsics(device: dai.Device, resize_w: int, resize_h: int) -> tuple:
     """Reads the camera intrinsics from the device and returns the focal lengths and principal points."""
     calibData = device.readCalibration2()
-    M2 = np.array(calibData.getCameraIntrinsics(dai.CameraBoardSocket.CAM_A, resize_w, resize_h))  # Because the displayed image is with NN input res 
+    M2 = np.array(
+        calibData.getCameraIntrinsics(dai.CameraBoardSocket.CAM_A, resize_w, resize_h)
+    )  # Because the displayed image is with NN input res
     fx = M2[0, 0]
     fy = M2[1, 1]
     cx = M2[0, 2]
     cy = M2[1, 2]
     return fx, fy, cx, cy
+
 
 def resize_and_pad(img, target_size, pad_color=0):
     """
@@ -56,7 +60,15 @@ def resize_and_pad(img, target_size, pad_color=0):
     pad_right = pad_horz - pad_left
 
     # Pad the image
-    img_padded = cv2.copyMakeBorder(img_resized, pad_top, pad_bottom, pad_left, pad_right, cv2.BORDER_CONSTANT, value=pad_color)
+    img_padded = cv2.copyMakeBorder(
+        img_resized,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        cv2.BORDER_CONSTANT,
+        value=pad_color,
+    )
 
     return img_padded
 
@@ -83,7 +95,7 @@ def reverse_resize_and_pad(padded_img, original_size, modified_size):
     """
     original_width, original_height = original_size
     modified_width, modified_height = modified_size
-    
+
     # Compute the aspect ratio of the original and target image
     original_aspect = original_width / original_height
     modified_aspect = modified_width / modified_height
@@ -107,9 +119,11 @@ def reverse_resize_and_pad(padded_img, original_size, modified_size):
     pad_right = pad_horz - pad_left
 
     # Remove padding by cropping
-    cropped_img = padded_img[pad_top:modified_height - pad_bottom, pad_left:modified_width - pad_right]
+    cropped_img = padded_img[
+        pad_top : modified_height - pad_bottom, pad_left : modified_width - pad_right
+    ]
 
     # Resize back to original dimensions
     original_img = cv2.resize(cropped_img, (original_width, original_height))
-    
+
     return original_img
