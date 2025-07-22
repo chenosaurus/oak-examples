@@ -34,6 +34,9 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
         self.fit = False
         self.helper_det = None
         self.helper_cuboid = None
+        self.last_successful_fit = 0
+        self.dimensions_cache = None
+        self.cache_duration = 1.0  # seconds
 
     def _draw_mask(self, mask: np.ndarray, idx: int):
         """
@@ -135,6 +138,8 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
 
         self.dimensions = dimensions
         self.fit = True
+        self.last_successful_fit = time.time()
+        self.dimensions_cache = dimensions
 
         corners = np.asarray(corners)
         outline = self.fitter.get_3d_lines_o3d(corners)
@@ -150,10 +155,14 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
         w, h = rr.size.width, rr.size.height
         angle = rr.angle
 
+        color = (1.0, 0.5, 0.5, 1.0)  # Red
+        bg_color = (1.0, 1.0, 0.0, 1.0)
+
         self.helper_det.draw_rotated_rect(
             (cx, cy),
             (w, h),
             angle,
+            outline_color=color,
             fill_color=None,
             thickness=2,
         )
@@ -167,13 +176,21 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
                 f"Box ({det._confidence:.2f}) "
                 f"{self.dimensions[0]:.1f} x {self.dimensions[1]:.1f} x {self.dimensions[2]:.1f} cm"
             )
-
+        elif self.dimensions_cache is not None and (
+            time.time() - self.last_successful_fit < self.cache_duration
+        ):
+            label = (
+                f"Box ({det._confidence:.2f}) "
+                f"{self.dimensions_cache[0]:.1f} x {self.dimensions_cache[1]:.1f} x {self.dimensions_cache[2]:.1f} cm"
+            )
         else:
             label = f"{'Box'} {det._confidence:.2f}"
 
         self.helper_det.draw_text(
             label,
             corner0,
+            color=color,
+            background_color=bg_color,
             size=18,
         )
 

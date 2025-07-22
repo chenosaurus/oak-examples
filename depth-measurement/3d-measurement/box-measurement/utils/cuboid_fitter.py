@@ -84,7 +84,7 @@ class CuboidFitter:
         """
         self.center = pcl_points.mean(axis=0)
         self.update_point_cloud(pcl_points)
-        if colors is not None:
+        if colors is not None and colors.size > 0:
             self.point_cloud.colors = o3d.utility.Vector3dVector(colors / 255.0)
 
         self.point_cloud = self.point_cloud.voxel_down_sample(
@@ -93,6 +93,8 @@ class CuboidFitter:
         self.point_cloud, _ = self.point_cloud.remove_statistical_outlier(40, 0.1)
 
         filtered_points, filtered_colors = self.MAD_filtering(self.point_cloud)
+        if filtered_points.size == 0:
+            return
         self.point_cloud.colors = o3d.utility.Vector3dVector(filtered_colors)
         self.point_cloud.points = o3d.utility.Vector3dVector(filtered_points)
 
