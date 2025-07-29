@@ -6,7 +6,6 @@ This example demonstrates how to run a 3 stage pipeline and multi input models. 
 1. The cropped face is used as input to the [Head pose model](https://models.luxonis.com/luxonis/head-pose-estimation/068ac18a-de71-4a6e-9f0f-42776c0ef980) which returns the 3D vector the heads position.
 1. The cropped eyes and the 3D pose vector are fed into [ADAS gaze estimation model](https://models.luxonis.com/luxonis/gaze-estimation-adas/b174ff1b-740b-4016-b8d5-b9488dbdd657) to compute the final gaze of the person.
 
-
 ## Demo
 
 [![Gaze Example Demo](https://github.com/luxonis/oak-examples/assets/18037362/6c7688e5-30bc-4bed-8455-8b8e9899c5b0)](https://tinyurl.com/5h3dycc5)
