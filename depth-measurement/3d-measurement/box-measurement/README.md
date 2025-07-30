@@ -4,6 +4,8 @@ This example showcases one possible approach for measuring the size of a box usi
 
 ![demo](https://github.com/luxonis/oak-examples/blob/master/gen2-multiple-devices/box-measurement/img/demo.gif)
 
+> **⚠️ Known issue:** Due to current CuboidFitter algorithm limitations, measurements may occasionally jump or skip between frames. Active stereo is crucial for stable results, and you may see some instability, especially on RVC2 devices.
+
 ## Usage
 
 Running this example requires a **Luxonis device** connected to your computer. Refer to the [documentation](https://docs.luxonis.com/software-v3/) to setup your device if you haven't done it already.
