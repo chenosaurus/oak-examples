@@ -199,9 +199,7 @@ class BoxProcessingNode(dai.node.ThreadedHostNode):
     ):
         """Draw all annotations (mask, 3D box fit, bounding box + label) for a single detection."""
         self._draw_mask(mask, idx)
-
         self._fit_cuboid(idx, mask, pcl, pcl_colors)
-
         self._draw_box_and_label(det)
 
     def run(self):

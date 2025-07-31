@@ -81,9 +81,9 @@ with dai.Pipeline(device) as p:
     if platform == dai.Platform.RVC2:
         nn.setNNArchive(nn_archive, numShaves=7)
 
-    nn._parsers[0].setConfidenceThreshold(0.7)
-    nn._parsers[0].setIouThreshold(0.5)
-    nn._parsers[0].setMaskConfidence(0.5)
+    nn.getParser().setConfidenceThreshold(0.7)
+    nn.getParser().setIouThreshold(0.5)
+    nn.getParser().setMaskConfidence(0.5)
 
     box_processing = p.create(BoxProcessingNode)
     box_processing.intrinsics = read_intrinsics(device, NN_WIDTH, NN_HEIGHT)
