@@ -9,8 +9,19 @@ import base64
 QUANT_ZERO_POINT = 90.0
 QUANT_SCALE = 0.003925696481
 
+QUANT_VALUES = {
+    "yolo-world": {
+        "quant_zero_point": 90.0,
+        "quant_scale": 0.003925696481,
+    },
+    "yoloe": {
+        "quant_zero_point": 174.0,
+        "quant_scale": 0.003328413470,
+    },
+}
 
-def pad_and_quantize_features(features, max_num_classes=80):
+
+def pad_and_quantize_features(features, max_num_classes=80, model_name="yolo-world"):
     """
     Apply padding and quantization to feature embeddings.
 
@@ -21,16 +32,18 @@ def pad_and_quantize_features(features, max_num_classes=80):
     Returns:
         Padded and quantized features as uint8 array
     """
+    quant_scale = QUANT_VALUES[model_name]["quant_scale"]
+    quant_zero_point = QUANT_VALUES[model_name]["quant_zero_point"]
     num_padding = max_num_classes - features.shape[0]
     padded_features = np.pad(
         features, ((0, num_padding), (0, 0)), mode="constant"
     ).T.reshape(1, 512, max_num_classes)
-    quantized_features = (padded_features / QUANT_SCALE) + QUANT_ZERO_POINT
+    quantized_features = (padded_features / quant_scale) + quant_zero_point
     quantized_features = quantized_features.astype("uint8")
     return quantized_features
 
 
-def extract_text_embeddings(class_names, max_num_classes=80):
+def extract_text_embeddings(class_names, max_num_classes=80, model_name="yolo-world"):
     tokenizer_json_path = download_tokenizer(
         url="https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/tokenizer.json",
         save_path="tokenizer.json",
@@ -42,30 +55,63 @@ def extract_text_embeddings(class_names, max_num_classes=80):
     encodings = tokenizer.encode_batch(class_names)
 
     text_onnx = np.array([e.ids for e in encodings], dtype=np.int64)
-    attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
 
-    textual_onnx_model_path = download_model(
-        "https://huggingface.co/jmzzomg/clip-vit-base-patch32-text-onnx/resolve/main/model.onnx",
-        "clip_textual_hf.onnx",
+    if model_name == "yolo-world":
+        attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+
+        textual_onnx_model_path = download_model(
+            "https://huggingface.co/jmzzomg/clip-vit-base-patch32-text-onnx/resolve/main/model.onnx",
+            "clip_textual_hf.onnx",
+        )
+
+        session_textual = onnxruntime.InferenceSession(
+            textual_onnx_model_path,
+            providers=[
+                "TensorrtExecutionProvider",
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+        )
+        textual_output = session_textual.run(
+            None,
+            {
+                session_textual.get_inputs()[0].name: text_onnx,
+                "attention_mask": attention_mask,
+            },
+        )[0]
+    elif model_name == "yoloe":
+        if text_onnx.shape[1] < 77:
+            text_onnx = np.pad(
+                text_onnx, ((0, 0), (0, 77 - text_onnx.shape[1])), mode="constant"
+            )
+
+        textual_onnx_model_path = download_model(
+            "https://huggingface.co/Xenova/mobileclip_blt/resolve/main/onnx/text_model.onnx",
+            "mobileclip_textual_hf.onnx",
+        )
+
+        session_textual = onnxruntime.InferenceSession(
+            textual_onnx_model_path,
+            providers=[
+                "TensorrtExecutionProvider",
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+        )
+        textual_output = session_textual.run(
+            None,
+            {
+                session_textual.get_inputs()[0].name: text_onnx,
+            },
+        )[0]
+
+        textual_output /= np.linalg.norm(
+            textual_output, ord=2, axis=-1, keepdims=True
+        )  # Normalize the output
+
+    text_features = pad_and_quantize_features(
+        textual_output, max_num_classes, model_name
     )
-
-    session_textual = onnxruntime.InferenceSession(
-        textual_onnx_model_path,
-        providers=[
-            "TensorrtExecutionProvider",
-            "CUDAExecutionProvider",
-            "CPUExecutionProvider",
-        ],
-    )
-    textual_output = session_textual.run(
-        None,
-        {
-            session_textual.get_inputs()[0].name: text_onnx,
-            "attention_mask": attention_mask,
-        },
-    )[0]
-
-    text_features = pad_and_quantize_features(textual_output, max_num_classes)
 
     del session_textual
 
