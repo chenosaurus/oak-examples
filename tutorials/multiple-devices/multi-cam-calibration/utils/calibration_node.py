@@ -225,8 +225,7 @@ class CalibrationNode(dai.node.HostNode):
 
             raw_cv_frame = in_still_msg.getCvFrame()
             print(
-                f"[{self.mxid}] CalibrationNode: ImgFrame received (type: {in_still_msg.getType()}, "
-                + f"size: {in_still_msg.getWidth()}x{in_still_msg.getHeight()})."
+                f"[{self.mxid}] CalibrationNode: ImgFrame received (type: {in_still_msg.getType()}, size: {in_still_msg.getWidth()}x{in_still_msg.getHeight()})."
             )
 
             return self._estimate_pose_from_image(raw_cv_frame)
