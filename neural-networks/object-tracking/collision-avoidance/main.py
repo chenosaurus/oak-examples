@@ -6,8 +6,6 @@ from utils.collision_avoidance_node import CollisionAvoidanceNode
 from utils.host_bird_eye_view import BirdsEyeView
 from utils.arguments import initialize_argparser
 
-DET_MODEL = "luxonis/yolov6-nano:r2-coco-512x288"
-
 _, args = initialize_argparser()
 
 visualizer = dai.RemoteConnection(httpPort=8082)
@@ -31,8 +29,10 @@ with dai.Pipeline(device) as pipeline:
     print("Creating pipeline...")
 
     # detection model
-    model_description = dai.NNModelDescription(DET_MODEL, platform=platform)
-    nn_archive = dai.NNArchive(dai.getModelFromZoo(model_description, useCached=False))
+    model_description = dai.NNModelDescription.fromYamlFile(
+        f"yolov6_nano_r2_coco.{platform}.yaml"
+    )
+    nn_archive = dai.NNArchive(dai.getModelFromZoo(model_description))
     labels = nn_archive.getConfig().model.heads[0].metadata.classes
     person_label = labels.index("person")
 
@@ -73,7 +73,10 @@ with dai.Pipeline(device) as pipeline:
     # tracking
     tracker = pipeline.create(dai.node.ObjectTracker)
     tracker.setDetectionLabelsToTrack([person_label])  # track only person
-    tracker.setTrackerType(dai.TrackerType.ZERO_TERM_COLOR_HISTOGRAM)
+    if platform == "RVC2":
+        tracker.setTrackerType(dai.TrackerType.ZERO_TERM_COLOR_HISTOGRAM)
+    else:
+        tracker.setTrackerType(dai.TrackerType.SHORT_TERM_IMAGELESS)
     tracker.setTrackerIdAssignmentPolicy(dai.TrackerIdAssignmentPolicy.UNIQUE_ID)
 
     img_detections_filter.out.link(tracker.inputDetections)
