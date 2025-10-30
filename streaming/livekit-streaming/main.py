@@ -1,3 +1,13 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "depthai",
+#   "livekit",
+#   "numpy",
+#   "python-dotenv",
+#   "opencv-python",
+# ]
+# ///
 import depthai as dai
 from utils.arguments import initialize_argparser
 import socket
