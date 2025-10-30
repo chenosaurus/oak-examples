@@ -5,6 +5,7 @@
 # ]
 # ///
 import depthai as dai
+import time
 from utils.arguments import initialize_argparser
 
 _, args = initialize_argparser()
@@ -47,7 +48,6 @@ with dai.Pipeline(device) as pipeline:
     print("Running pipeline...")
 
     while pipeline.isRunning():
-        # Drain encoder output and invoke callback for every encoded frame
-        while True:
-            device.getQueueEvents() 
+        # Keep the host process alive while the on-device Script streams H264
+        time.sleep(0.1)
     pipeline.stop()
