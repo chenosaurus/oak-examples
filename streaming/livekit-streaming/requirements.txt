@@ -1,0 +1,5 @@
+depthai==3.0.0
+numpy>=1.22
+opencv-python>=4.8
+livekit>=1.0.17
+python-dotenv>=1.0
