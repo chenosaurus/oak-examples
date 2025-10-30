@@ -1,4 +1,10 @@
-# pip install depthai
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#   "depthai",
+# ]
+# ///
+
 import depthai as dai
 
 SERVER_IP   = "192.168.1.50"   # your TCP server
