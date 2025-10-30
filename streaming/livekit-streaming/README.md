@@ -42,3 +42,18 @@ lk token create --api-key <api key> \
   --url <url>\
    --identity=<viewer identity> --room=<room name> --join --open meet
 ```
+
+To run on camera pipeline instead of proxying the stream thru a TCP server on the host, use the `stream_on_cam.py` script
+
+To start the pipeline:
+```
+uv run stream_on_cam.py --device 192.168.2.21 --port 5021
+
+```
+
+Then, to publish the stream, point the LiveKit CLI to the h264 stream from the camera's IP:
+```
+lk room join --identity <participant-identity> --api-key <api key> \
+   --api-secret <secret> \
+   --url "<livekit cloud url>" --publish h264://192.168.2.21:5021 <room name>
+```
