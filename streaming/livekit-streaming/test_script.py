@@ -31,6 +31,7 @@ with dai.Pipeline(device) as pipeline:
 
    # Script node will open a TCP socket and forward encoded bytes
     script = pipeline.create(dai.node.Script)
+    script.setProcessor(dai.ProcessorType.LEON_CSS)
     vid_enc.bitstream.link(script.inputs['h264'])
 
     script.setScript(f"""
